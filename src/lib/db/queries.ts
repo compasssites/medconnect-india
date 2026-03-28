@@ -58,6 +58,16 @@ export async function ensureAdminUser(d1: D1Database, email: string) {
   return db.select().from(users).where(eq(users.id, adminId)).get();
 }
 
+export async function hasAdminAccount(d1: D1Database) {
+  const db = getDb(d1);
+  const row = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(users)
+    .where(eq(users.role, "admin"))
+    .get();
+  return (row?.count ?? 0) > 0;
+}
+
 // ─── Doctor queries ──────────────────────────────────────────────────────────
 
 export type DoctorSearchParams = {

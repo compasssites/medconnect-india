@@ -1,0 +1,118 @@
+---
+import AuthLayout from "../../../layouts/AuthLayout.astro";
+import { getSession, getSessionUser, updateSessionUserId } from "../../../lib/auth/session";
+import { ensureAdminUser } from "../../../lib/db/queries";
+
+const session = Astro.cookies.get("session");
+if (!session?.value) return Astro.redirect("/auth/login");
+
+const env = (Astro.locals as App.Locals).runtime?.env;
+if (!env) return Astro.redirect("/auth/login");
+
+const sessionData = await getSession(env.SESSIONS, session.value);
+if (!sessionData) return Astro.redirect("/auth/login");
+
+if (sessionData.userId) {
+  const existingUser = await getSessionUser(env.SESSIONS, env.DB, session.value);
+  if (existingUser?.role) return Astro.redirect(`/dashboard/${existingUser.role}`);
+}
+
+const adminEmail = env.ADMIN_EMAIL?.trim().toLowerCase();
+if (!sessionData.userId && adminEmail && sessionData.email === adminEmail) {
+  const adminUser = await ensureAdminUser(env.DB, sessionData.email);
+  if (adminUser) {
+    await updateSessionUserId(env.SESSIONS, session.value, adminUser.id);
+    return Astro.redirect("/dashboard/admin");
+  }
+}
+---
+
+<AuthLayout title="Patient registration — MedConnect">
+  <div class="rounded-2xl border border-[var(--color-border)] bg-white p-8 shadow-sm">
+    <a href="/auth/register" class="mb-5 inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:underline">← Back</a>
+    <h1 class="mb-1 text-2xl font-bold">Patient registration</h1>
+    <p class="mb-8 text-sm text-[var(--color-muted)]">Set up your patient account for {sessionData.email}.</p>
+
+    <form id="patient-form" novalidate>
+      <div class="mb-4">
+        <label for="name" class="mb-1.5 block text-sm font-medium">Full name</label>
+        <input
+          id="name"
+          name="name"
+          type="text"
+          placeholder="Priya Sharma"
+          autocomplete="name"
+          required
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label for="phone" class="mb-1.5 block text-sm font-medium">Mobile number <span class="font-normal text-[var(--color-muted)]">(optional)</span></label>
+        <input
+          id="phone"
+          name="phone"
+          type="tel"
+          inputmode="numeric"
+          placeholder="+91 98765 43210"
+          autocomplete="tel"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+        />
+      </div>
+
+      <p id="form-error" class="mb-3 hidden text-xs text-[var(--color-danger)]"></p>
+
+      <button
+        type="submit"
+        id="submit-btn"
+        class="w-full rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-dark)] disabled:opacity-60"
+      >
+        Create patient account
+      </button>
+    </form>
+  </div>
+</AuthLayout>
+
+<script>
+  const form = document.getElementById("patient-form") as HTMLFormElement;
+  const submitBtn = document.getElementById("submit-btn") as HTMLButtonElement;
+  const formError = document.getElementById("form-error") as HTMLParagraphElement;
+  const nameInput = document.getElementById("name") as HTMLInputElement;
+  const phoneInput = document.getElementById("phone") as HTMLInputElement;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    formError.classList.add("hidden");
+
+    const name = nameInput.value.trim();
+    if (name.length < 2) {
+      formError.textContent = "Please enter your full name";
+      formError.classList.remove("hidden");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Creating account…";
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          role: "patient",
+          name,
+          phone: phoneInput.value.trim(),
+        }),
+      });
+
+      const data = await response.json<{ error?: string; role?: string }>();
+      if (!response.ok) throw new Error(data.error ?? "Registration failed");
+      window.location.href = `/dashboard/${data.role ?? "patient"}`;
+    } catch (error: unknown) {
+      formError.textContent = error instanceof Error ? error.message : "Registration failed";
+      formError.classList.remove("hidden");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Create patient account";
+    }
+  });
+</script>

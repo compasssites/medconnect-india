@@ -8,7 +8,11 @@ import { ulid } from "ulid";
 import { users, doctorProfiles, doctorApprovalRequests } from "../../lib/db/schema";
 import { getSession, updateSessionUserId } from "../../lib/auth/session";
 import { generateDoctorSlug } from "../../lib/utils/slug";
-import { countVerifiedDoctors, getDoctorProfileByUserId } from "../../lib/db/queries";
+import {
+  countVerifiedDoctors,
+  getDoctorProfileByUserId,
+  hasAdminAccount,
+} from "../../lib/db/queries";
 import type { HonoEnv } from "../index";
 
 const optionalPhoneSchema = z
@@ -65,9 +69,11 @@ app.post("/", zValidator("json", registerSchema), async (c) => {
 
   if (data.role === "doctor") {
     const verifiedDoctorCount = await countVerifiedDoctors(c.env.DB);
-    isBootstrapDoctor = verifiedDoctorCount === 0;
+    const adminExists = await hasAdminAccount(c.env.DB);
+    isBootstrapDoctor = verifiedDoctorCount === 0 && !adminExists;
+    const needsDoctorRecommendation = verifiedDoctorCount > 0;
 
-    if (!isBootstrapDoctor) {
+    if (needsDoctorRecommendation) {
       if (!data.recommendedByUserId) {
         return c.json({ error: "Please choose an existing doctor for approval" }, 400);
       }
@@ -113,7 +119,7 @@ app.post("/", zValidator("json", registerSchema), async (c) => {
       await db.insert(doctorApprovalRequests).values({
         id: ulid(),
         doctorUserId: userId,
-        recommendedByUserId: data.recommendedByUserId,
+        recommendedByUserId: data.recommendedByUserId || null,
         status: "pending",
         requestedAt: now,
         createdAt: now,

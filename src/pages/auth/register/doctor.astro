@@ -1,0 +1,248 @@
+---
+import AuthLayout from "../../../layouts/AuthLayout.astro";
+import { getSession, getSessionUser, updateSessionUserId } from "../../../lib/auth/session";
+import { ensureAdminUser, hasAdminAccount, listApprovedDoctors } from "../../../lib/db/queries";
+
+const session = Astro.cookies.get("session");
+if (!session?.value) return Astro.redirect("/auth/login");
+
+const env = (Astro.locals as App.Locals).runtime?.env;
+if (!env) return Astro.redirect("/auth/login");
+
+const sessionData = await getSession(env.SESSIONS, session.value);
+if (!sessionData) return Astro.redirect("/auth/login");
+
+if (sessionData.userId) {
+  const existingUser = await getSessionUser(env.SESSIONS, env.DB, session.value);
+  if (existingUser?.role) return Astro.redirect(`/dashboard/${existingUser.role}`);
+}
+
+const adminEmail = env.ADMIN_EMAIL?.trim().toLowerCase();
+if (!sessionData.userId && adminEmail && sessionData.email === adminEmail) {
+  const adminUser = await ensureAdminUser(env.DB, sessionData.email);
+  if (adminUser) {
+    await updateSessionUserId(env.SESSIONS, session.value, adminUser.id);
+    return Astro.redirect("/dashboard/admin");
+  }
+}
+
+const approvedDoctors = await listApprovedDoctors(env.DB);
+const adminExists = await hasAdminAccount(env.DB);
+const needsDoctorRecommendation = approvedDoctors.length > 0;
+---
+
+<AuthLayout title="Doctor registration — MedConnect">
+  <div class="rounded-2xl border border-[var(--color-border)] bg-white p-8 shadow-sm">
+    <a href="/auth/register" class="mb-5 inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:underline">← Back</a>
+    <h1 class="mb-1 text-2xl font-bold">Doctor registration</h1>
+    <p class="mb-6 text-sm text-[var(--color-muted)]">Set up your doctor account for {sessionData.email}.</p>
+
+    {needsDoctorRecommendation ? (
+      <div class="mb-6 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800">
+        Choose an approved doctor who can review your registration after you submit it.
+      </div>
+    ) : adminExists ? (
+      <div class="mb-6 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+        There are no approved doctors yet. Your registration will go to the admin dashboard for review.
+      </div>
+    ) : (
+      <div class="mb-6 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+        No approved doctors exist yet, so the first doctor account will be approved directly.
+      </div>
+    )}
+
+    <form id="doctor-form" novalidate>
+      <div class="mb-4">
+        <label for="name" class="mb-1.5 block text-sm font-medium">Full name</label>
+        <input
+          id="name"
+          name="name"
+          type="text"
+          placeholder="Dr. Priya Sharma"
+          autocomplete="name"
+          required
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label for="phone" class="mb-1.5 block text-sm font-medium">Mobile number <span class="font-normal text-[var(--color-muted)]">(optional)</span></label>
+        <input
+          id="phone"
+          name="phone"
+          type="tel"
+          inputmode="numeric"
+          placeholder="+91 98765 43210"
+          autocomplete="tel"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label for="specialization" class="mb-1.5 block text-sm font-medium">Specialization</label>
+        <input
+          id="specialization"
+          name="specialization"
+          type="text"
+          placeholder="General Physician"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label for="qualification" class="mb-1.5 block text-sm font-medium">Qualification</label>
+        <input
+          id="qualification"
+          name="qualification"
+          type="text"
+          placeholder="MBBS, MD"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+        />
+      </div>
+
+      <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label for="reg-number" class="mb-1.5 block text-sm font-medium">Registration number</label>
+          <input
+            id="reg-number"
+            name="registrationNumber"
+            type="text"
+            placeholder="MH-12345"
+            class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          />
+        </div>
+        <div>
+          <label for="reg-council" class="mb-1.5 block text-sm font-medium">Council</label>
+          <input
+            id="reg-council"
+            name="registrationCouncil"
+            type="text"
+            placeholder="Maharashtra Medical Council"
+            class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          />
+        </div>
+      </div>
+
+      <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label for="city" class="mb-1.5 block text-sm font-medium">City</label>
+          <input
+            id="city"
+            name="city"
+            type="text"
+            placeholder="Mumbai"
+            class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          />
+        </div>
+        <div>
+          <label for="state" class="mb-1.5 block text-sm font-medium">State</label>
+          <input
+            id="state"
+            name="state"
+            type="text"
+            placeholder="Maharashtra"
+            class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          />
+        </div>
+      </div>
+
+      {needsDoctorRecommendation && (
+        <div class="mb-4">
+          <label for="recommended-by" class="mb-1.5 block text-sm font-medium">Recommended by</label>
+          <select
+            id="recommended-by"
+            name="recommendedByUserId"
+            class="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          >
+            <option value="">Choose an approved doctor</option>
+            {approvedDoctors.map((doctor) => (
+              <option value={doctor.userId}>
+                {doctor.name} · {doctor.specialization}{doctor.city ? ` · ${doctor.city}` : ""}
+              </option>
+            ))}
+          </select>
+          <p class="mt-1 text-xs text-[var(--color-muted)]">The selected doctor will see your approval request in their dashboard.</p>
+        </div>
+      )}
+
+      <p id="form-error" class="mb-3 hidden text-xs text-[var(--color-danger)]"></p>
+
+      <button
+        type="submit"
+        id="submit-btn"
+        class="w-full rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-dark)] disabled:opacity-60"
+      >
+        Create doctor account
+      </button>
+    </form>
+  </div>
+</AuthLayout>
+
+<script define:vars={{ needsDoctorRecommendation }}>
+  const form = document.getElementById("doctor-form") as HTMLFormElement;
+  const submitBtn = document.getElementById("submit-btn") as HTMLButtonElement;
+  const formError = document.getElementById("form-error") as HTMLParagraphElement;
+
+  function readValue(id: string) {
+    return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement).value.trim();
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    formError.classList.add("hidden");
+
+    const body: Record<string, string> = {
+      role: "doctor",
+      name: readValue("name"),
+      phone: readValue("phone"),
+      specialization: readValue("specialization"),
+      qualification: readValue("qualification"),
+      registrationNumber: readValue("reg-number"),
+      registrationCouncil: readValue("reg-council"),
+      city: readValue("city"),
+      state: readValue("state"),
+    };
+
+    if (needsDoctorRecommendation) {
+      body.recommendedByUserId = readValue("recommended-by");
+    }
+
+    if (body.name.length < 2) {
+      formError.textContent = "Please enter your full name";
+      formError.classList.remove("hidden");
+      return;
+    }
+
+    if (!body.specialization || !body.qualification || !body.registrationNumber || !body.registrationCouncil) {
+      formError.textContent = "Please fill all required doctor details";
+      formError.classList.remove("hidden");
+      return;
+    }
+
+    if (needsDoctorRecommendation && !body.recommendedByUserId) {
+      formError.textContent = "Please choose an approved doctor for review";
+      formError.classList.remove("hidden");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Creating account…";
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json<{ error?: string; role?: string }>();
+      if (!response.ok) throw new Error(data.error ?? "Registration failed");
+      window.location.href = `/dashboard/${data.role ?? "doctor"}`;
+    } catch (error: unknown) {
+      formError.textContent = error instanceof Error ? error.message : "Registration failed";
+      formError.classList.remove("hidden");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Create doctor account";
+    }
+  });
+</script>
