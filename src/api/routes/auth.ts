@@ -45,25 +45,39 @@ app.post("/send-otp", zValidator("json", sendOtpSchema), async (c) => {
 
 // POST /api/auth/verify-otp
 app.post("/verify-otp", zValidator("json", verifyOtpSchema), async (c) => {
-  const { email, otp } = c.req.valid("json");
-  const normalizedEmail = email.trim().toLowerCase();
-  const normalizedOtp = otp.replace(/\D/g, "").slice(0, 6);
+  try {
+    const { email, otp } = c.req.valid("json");
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedOtp = otp.replace(/\D/g, "").slice(0, 6);
 
-  const storedOtp = await c.env.SESSIONS.get(`otp:${normalizedEmail}`);
-  if (!storedOtp || storedOtp !== normalizedOtp) {
-    return c.json({ error: "Invalid or expired OTP" }, 400);
+    const storedOtp = await c.env.SESSIONS.get(`otp:${normalizedEmail}`);
+    if (!storedOtp || storedOtp !== normalizedOtp) {
+      return c.json({ error: "Invalid or expired code" }, 400);
+    }
+    await c.env.SESSIONS.delete(`otp:${normalizedEmail}`);
+
+    const user = await getUserByEmail(c.env.DB, normalizedEmail);
+    const sessionToken = await createSession(c.env.SESSIONS, user?.id ?? null, normalizedEmail);
+
+    c.header(
+      "Set-Cookie",
+      `session=${encodeURIComponent(sessionToken)}; Max-Age=${60 * 60 * 24 * 30}; Path=/; SameSite=Lax; Secure; HttpOnly`
+    );
+
+    return c.json({
+      success: true,
+      isNewUser: !user,
+      user: user ?? null,
+    });
+  } catch (error) {
+    console.error("verify-otp failed", error);
+    return c.json(
+      {
+        error: error instanceof Error ? `Sign-in failed: ${error.message}` : "Sign-in failed",
+      },
+      500
+    );
   }
-  await c.env.SESSIONS.delete(`otp:${normalizedEmail}`);
-
-  const user = await getUserByEmail(c.env.DB, normalizedEmail);
-  const sessionToken = await createSession(c.env.SESSIONS, user?.id ?? null, normalizedEmail);
-
-  return c.json({
-    success: true,
-    isNewUser: !user,
-    user: user ?? null,
-    sessionToken,
-  });
 });
 
 // POST /api/auth/logout
