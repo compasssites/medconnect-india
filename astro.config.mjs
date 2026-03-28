@@ -9,6 +9,11 @@ export default defineConfig({
     platformProxy: {
       enabled: true,
     },
+    // Export ChatRoom DO class from the worker entrypoint
+    workerEntryPoint: {
+      path: "./src/worker-entry.ts",
+      namedExports: ["ChatRoom"],
+    },
   }),
   integrations: [
     preact({ include: ["**/chat/**"] }),

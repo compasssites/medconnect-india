@@ -1,5 +1,5 @@
 name = "medconnect"
-main = "dist/_worker.js"
+main = "dist/_worker.js/index.js"
 compatibility_date = "2025-03-28"
 compatibility_flags = ["nodejs_compat"]
 
@@ -34,5 +34,4 @@ bindings = [
 tag = "v1"
 new_sqlite_classes = ["ChatRoom"]
 
-[assets]
-directory = "./dist/client"
+# Assets are bundled into _worker.js by @astrojs/cloudflare — no separate assets dir needed
