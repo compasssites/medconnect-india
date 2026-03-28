@@ -8,7 +8,10 @@ export const sendOtpSchema = z.object({
 
 export const verifyOtpSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address"),
-  otp: z.string().length(6).regex(/^\d{6}$/, "OTP must be 6 digits"),
+  otp: z.preprocess(
+    (value) => (typeof value === "string" ? value.replace(/\D/g, "").slice(0, 6) : value),
+    z.string().length(6).regex(/^\d{6}$/, "OTP must be 6 digits")
+  ),
 });
 
 // ─── Doctor Profile ──────────────────────────────────────────────────────────

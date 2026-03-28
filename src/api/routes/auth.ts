@@ -47,9 +47,10 @@ app.post("/send-otp", zValidator("json", sendOtpSchema), async (c) => {
 app.post("/verify-otp", zValidator("json", verifyOtpSchema), async (c) => {
   const { email, otp } = c.req.valid("json");
   const normalizedEmail = email.trim().toLowerCase();
+  const normalizedOtp = otp.replace(/\D/g, "").slice(0, 6);
 
   const storedOtp = await c.env.SESSIONS.get(`otp:${normalizedEmail}`);
-  if (!storedOtp || storedOtp !== otp) {
+  if (!storedOtp || storedOtp !== normalizedOtp) {
     return c.json({ error: "Invalid or expired OTP" }, 400);
   }
   await c.env.SESSIONS.delete(`otp:${normalizedEmail}`);

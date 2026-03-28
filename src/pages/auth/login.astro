@@ -62,7 +62,7 @@ if (session?.value) {
             id="otp"
             type="text"
             inputmode="numeric"
-            maxlength="6"
+            maxlength="12"
             placeholder="342962"
             autocomplete="one-time-code"
             required
@@ -220,6 +220,12 @@ if (session?.value) {
   otpInput.addEventListener("input", () => {
     const digits = otpInput.value.replace(/\D/g, "").slice(0, 6);
     if (otpInput.value !== digits) otpInput.value = digits;
+  });
+
+  otpInput.addEventListener("paste", (event) => {
+    event.preventDefault();
+    const pasted = event.clipboardData?.getData("text") ?? "";
+    otpInput.value = pasted.replace(/\D/g, "").slice(0, 6);
   });
 
   changeEmail.addEventListener("click", () => {
