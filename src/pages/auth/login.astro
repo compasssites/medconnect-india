@@ -35,16 +35,16 @@ if (session?.value) {
           <p id="email-error" class="text-xs text-[var(--color-danger)] mt-1 hidden"></p>
         </div>
         <button
-          type="submit"
+          type="button"
           id="send-btn"
           class="w-full py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-60"
         >
-          Send OTP
+          Email code
         </button>
       </form>
     </div>
 
-    <!-- Step 2: OTP input (hidden initially) -->
+    <!-- Step 2: Code input (hidden initially) -->
     <div id="step-otp" class="hidden">
       <p class="text-sm text-[var(--color-muted)] mb-3">
         Enter the code for <span id="otp-email-display" class="font-medium text-[var(--color-text)]"></span>.
@@ -57,7 +57,7 @@ if (session?.value) {
       </div>
       <form id="otp-form" novalidate>
         <div class="mb-4">
-          <label for="otp" class="block text-sm font-medium mb-1.5">Enter 6-digit OTP</label>
+          <label for="otp" class="block text-sm font-medium mb-1.5">Enter 6-digit code</label>
           <input
             id="otp"
             type="text"
@@ -71,11 +71,11 @@ if (session?.value) {
           <p id="otp-error" class="text-xs text-[var(--color-danger)] mt-1 hidden"></p>
         </div>
         <button
-          type="submit"
+          type="button"
           id="verify-btn"
           class="w-full py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-60"
         >
-          Verify OTP
+          Continue
         </button>
         <button
           type="button"
@@ -83,7 +83,7 @@ if (session?.value) {
           class="w-full mt-2 py-2 text-sm text-[var(--color-primary)] hover:underline disabled:opacity-50"
           disabled
         >
-          Resend OTP <span id="resend-timer">(30s)</span>
+          Resend code <span id="resend-timer">(30s)</span>
         </button>
       </form>
     </div>
@@ -136,7 +136,7 @@ if (session?.value) {
     }, 1000);
   }
 
-  async function sendOtp(email: string) {
+  async function sendCode(email: string) {
     sendBtn.disabled = true;
     sendBtn.textContent = "Sending…";
     clearError(emailError);
@@ -147,14 +147,14 @@ if (session?.value) {
         body: JSON.stringify({ email }),
       });
       const data = await res.json<{ error?: string; otp?: string }>();
-      if (!res.ok) throw new Error(data.error ?? "Failed to send OTP");
+      if (!res.ok) throw new Error(data.error ?? "Failed to send code");
 
       currentEmail = email;
       otpEmailDisplay.textContent = email;
       stepEmail.classList.add("hidden");
       stepOtp.classList.remove("hidden");
 
-      // MVP: show OTP inline when SMS is not configured
+      // Dev fallback: show the code inline when email is not configured
       if (data.otp) {
         devOtpValue.textContent = data.otp;
         devOtpBanner.classList.remove("hidden");
@@ -166,29 +166,27 @@ if (session?.value) {
       otpInput.focus();
       startResendTimer();
     } catch (e: unknown) {
-      showError(emailError, e instanceof Error ? e.message : "Failed to send OTP");
+      showError(emailError, e instanceof Error ? e.message : "Failed to send code");
     } finally {
       sendBtn.disabled = false;
-      sendBtn.textContent = "Send OTP";
+      sendBtn.textContent = "Email code";
     }
   }
 
-  document.getElementById("email-form")!.addEventListener("submit", async (e) => {
-    e.preventDefault();
+  async function handleSendCode() {
     const email = emailInput.value.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       showError(emailError, "Enter a valid email address");
       return;
     }
-    await sendOtp(email);
-  });
+    await sendCode(email);
+  }
 
-  document.getElementById("otp-form")!.addEventListener("submit", async (e) => {
-    e.preventDefault();
+  async function handleVerifyCode() {
     const otp = otpInput.value.replace(/\D/g, "").slice(0, 6);
     otpInput.value = otp;
     if (!/^\d{6}$/.test(otp)) {
-      showError(otpError, "Enter the 6-digit OTP");
+      showError(otpError, "Enter the 6-digit code");
       return;
     }
     verifyBtn.disabled = true;
@@ -211,11 +209,22 @@ if (session?.value) {
     } catch (e: unknown) {
       showError(otpError, e instanceof Error ? e.message : "Verification failed");
       verifyBtn.disabled = false;
-      verifyBtn.textContent = "Verify OTP";
+      verifyBtn.textContent = "Continue";
+    }
+  }
+
+  document.getElementById("email-form")!.addEventListener("submit", (e) => e.preventDefault());
+  document.getElementById("otp-form")!.addEventListener("submit", (e) => e.preventDefault());
+  sendBtn.addEventListener("click", handleSendCode);
+  verifyBtn.addEventListener("click", handleVerifyCode);
+  resendBtn.addEventListener("click", () => sendCode(currentEmail));
+
+  emailInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void handleSendCode();
     }
   });
-
-  resendBtn.addEventListener("click", () => sendOtp(currentEmail));
 
   otpInput.addEventListener("input", () => {
     const digits = otpInput.value.replace(/\D/g, "").slice(0, 6);
@@ -226,6 +235,13 @@ if (session?.value) {
     event.preventDefault();
     const pasted = event.clipboardData?.getData("text") ?? "";
     otpInput.value = pasted.replace(/\D/g, "").slice(0, 6);
+  });
+
+  otpInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void handleVerifyCode();
+    }
   });
 
   changeEmail.addEventListener("click", () => {
