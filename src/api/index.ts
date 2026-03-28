@@ -28,6 +28,7 @@ type Bindings = {
   AWS_REGION?: string | SecretStoreBinding;
   AWS_SES_FROM_EMAIL?: string | SecretStoreBinding;
   SESSION_SECRET: string;
+  ADMIN_EMAIL?: string;
   APP_URL: string;
 };
 

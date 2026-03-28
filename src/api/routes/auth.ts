@@ -4,7 +4,7 @@ import { deleteCookie, getCookie } from "hono/cookie";
 import { sendOtpSchema, verifyOtpSchema } from "../validators/schemas";
 import { generateOtp, sendOtp } from "../../lib/auth/otp";
 import { createSession, destroySession, getSessionUser } from "../../lib/auth/session";
-import { getUserByEmail } from "../../lib/db/queries";
+import { ensureAdminUser, getUserByEmail } from "../../lib/db/queries";
 import type { HonoEnv } from "../index";
 
 const app = new Hono<HonoEnv>();
@@ -56,7 +56,10 @@ app.post("/verify-otp", zValidator("json", verifyOtpSchema), async (c) => {
     }
     await c.env.SESSIONS.delete(`otp:${normalizedEmail}`);
 
-    const user = await getUserByEmail(c.env.DB, normalizedEmail);
+    const adminEmail = c.env.ADMIN_EMAIL?.trim().toLowerCase();
+    const user = adminEmail && normalizedEmail === adminEmail
+      ? await ensureAdminUser(c.env.DB, normalizedEmail)
+      : await getUserByEmail(c.env.DB, normalizedEmail);
     const sessionToken = await createSession(c.env.SESSIONS, user?.id ?? null, normalizedEmail);
 
     c.header(

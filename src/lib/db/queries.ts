@@ -27,6 +27,37 @@ export async function getUserById(d1: D1Database, id: string) {
   return db.select().from(users).where(eq(users.id, id)).get();
 }
 
+export async function ensureAdminUser(d1: D1Database, email: string) {
+  const db = getDb(d1);
+  const normalizedEmail = email.trim().toLowerCase();
+  const now = Math.floor(Date.now() / 1000);
+  const existing = await db.select().from(users).where(eq(users.email, normalizedEmail)).get();
+
+  if (existing) {
+    if (existing.role !== "admin") {
+      await db.update(users).set({ role: "admin", updatedAt: now }).where(eq(users.id, existing.id));
+      await db.delete(doctorProfiles).where(eq(doctorProfiles.userId, existing.id));
+      await db.delete(patientProfiles).where(eq(patientProfiles.userId, existing.id));
+      await db.delete(doctorApprovalRequests).where(eq(doctorApprovalRequests.doctorUserId, existing.id));
+      return db.select().from(users).where(eq(users.id, existing.id)).get();
+    }
+    return existing;
+  }
+
+  const adminId = crypto.randomUUID();
+  await db.insert(users).values({
+    id: adminId,
+    email: normalizedEmail,
+    phone: null,
+    name: "MedConnect Admin",
+    role: "admin",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return db.select().from(users).where(eq(users.id, adminId)).get();
+}
+
 // ─── Doctor queries ──────────────────────────────────────────────────────────
 
 export type DoctorSearchParams = {
@@ -132,10 +163,10 @@ export async function getDoctorApprovalRequestForDoctor(d1: D1Database, doctorUs
     .get();
 }
 
-export async function getPendingApprovalRequestsForReviewer(d1: D1Database, reviewerUserId: string) {
+export async function getPendingApprovalRequestsForReviewer(d1: D1Database, reviewerUserId?: string) {
   const db = getDb(d1);
 
-  return db
+  const baseQuery = db
     .select({
       request: doctorApprovalRequests,
       doctor: {
@@ -148,7 +179,13 @@ export async function getPendingApprovalRequestsForReviewer(d1: D1Database, revi
     })
     .from(doctorApprovalRequests)
     .innerJoin(users, eq(doctorApprovalRequests.doctorUserId, users.id))
-    .innerJoin(doctorProfiles, eq(doctorProfiles.userId, users.id))
+    .innerJoin(doctorProfiles, eq(doctorProfiles.userId, users.id));
+
+  if (!reviewerUserId) {
+    return baseQuery.where(eq(doctorApprovalRequests.status, "pending")).all();
+  }
+
+  return baseQuery
     .where(
       and(
         eq(doctorApprovalRequests.status, "pending"),

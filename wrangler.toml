@@ -7,6 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 MSG91_TEMPLATE_ID = ""
 APP_URL = "https://medconnect.in"
 SES_FROM_EMAIL = "forms@mycompass.in"
+ADMIN_EMAIL = "mywebsite@mycompass.in"
 
 # Secrets (set via `wrangler secret put`):
 # MSG91_AUTH_KEY

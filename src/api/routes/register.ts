@@ -47,6 +47,9 @@ app.post("/", zValidator("json", registerSchema), async (c) => {
   const session = await getSession(c.env.SESSIONS, token);
   if (!session) return c.json({ error: "Session expired" }, 401);
   if (session.userId) return c.json({ error: "Already registered" }, 400);
+  if (c.env.ADMIN_EMAIL && session.email === c.env.ADMIN_EMAIL.trim().toLowerCase()) {
+    return c.json({ error: "This email is reserved for the admin account" }, 403);
+  }
 
   const data = c.req.valid("json");
   const db = drizzle(c.env.DB);

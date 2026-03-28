@@ -1,20 +1,32 @@
 ---
 import AuthLayout from "../../layouts/AuthLayout.astro";
-import { listApprovedDoctors } from "../../lib/db/queries";
+import { getSession, getSessionUser, updateSessionUserId } from "../../lib/auth/session";
+import { ensureAdminUser, listApprovedDoctors } from "../../lib/db/queries";
 
-// Must have a valid session (just verified OTP)
+// Must have a valid session (just verified code)
 const session = Astro.cookies.get("session");
 if (!session?.value) return Astro.redirect("/auth/login");
 const env = (Astro.locals as App.Locals).runtime?.env;
+if (!env) return Astro.redirect("/auth/login");
 
-const res = await fetch(`${Astro.url.origin}/api/auth/me`, {
-  headers: { cookie: `session=${session.value}` },
-});
-const data = await res.json<{ user: { role: string } | null }>();
-// Already registered → go to dashboard
-if (data.user?.role) return Astro.redirect(`/dashboard/${data.user.role}`);
+const sessionData = await getSession(env.SESSIONS, session.value);
+if (!sessionData) return Astro.redirect("/auth/login");
 
-const approvedDoctors = env ? await listApprovedDoctors(env.DB) : [];
+if (sessionData.userId) {
+  const existingUser = await getSessionUser(env.SESSIONS, env.DB, session.value);
+  if (existingUser?.role) return Astro.redirect(`/dashboard/${existingUser.role}`);
+}
+
+const adminEmail = env.ADMIN_EMAIL?.trim().toLowerCase();
+if (!sessionData.userId && adminEmail && sessionData.email === adminEmail) {
+  const adminUser = await ensureAdminUser(env.DB, sessionData.email);
+  if (adminUser) {
+    await updateSessionUserId(env.SESSIONS, session.value, adminUser.id);
+    return Astro.redirect("/dashboard/admin");
+  }
+}
+
+const approvedDoctors = await listApprovedDoctors(env.DB);
 ---
 
 <AuthLayout title="Create your account — MedConnect">

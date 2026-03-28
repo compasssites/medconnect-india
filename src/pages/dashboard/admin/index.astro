@@ -1,0 +1,140 @@
+---
+import DashboardLayout from "../../../layouts/DashboardLayout.astro";
+import { getSessionUser } from "../../../lib/auth/session";
+import { countVerifiedDoctors, getPendingApprovalRequestsForReviewer } from "../../../lib/db/queries";
+import { drizzle } from "drizzle-orm/d1";
+import { eq, sql } from "drizzle-orm";
+import { users } from "../../../lib/db/schema";
+
+const env = (Astro.locals as App.Locals).runtime?.env;
+const sessionCookie = Astro.cookies.get("session")?.value;
+if (!sessionCookie || !env) return Astro.redirect("/auth/login");
+
+const currentUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
+if (!currentUser || currentUser.role !== "admin") return Astro.redirect("/auth/login");
+
+const db = drizzle(env.DB);
+const approvalRequests = await getPendingApprovalRequestsForReviewer(env.DB);
+const approvedDoctors = await countVerifiedDoctors(env.DB);
+const userCount = (await db.select({ count: sql<number>`count(*)` }).from(users).get())?.count ?? 0;
+const patientCount =
+  (await db.select({ count: sql<number>`count(*)` }).from(users).where(eq(users.role, "patient")).get())?.count ?? 0;
+
+const recommenderIds = [...new Set(approvalRequests.map((item) => item.request.recommendedByUserId).filter(Boolean))] as string[];
+const recommenderMap: Record<string, string> = {};
+for (const id of recommenderIds) {
+  const user = await db.select({ name: users.name }).from(users).where(eq(users.id, id)).get();
+  if (user) recommenderMap[id] = user.name;
+}
+---
+
+<DashboardLayout title="Admin Dashboard — MedConnect" role="admin">
+  <div class="mb-6">
+    <h1 class="text-xl font-bold">Admin Dashboard</h1>
+    <p class="mt-1 text-sm text-[var(--color-muted)]">Signed in as {currentUser.email}</p>
+  </div>
+
+  <div class="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+    {[
+      { label: "Total users", value: userCount, color: "text-[var(--color-primary)]" },
+      { label: "Patients", value: patientCount, color: "text-[var(--color-secondary)]" },
+      { label: "Approved doctors", value: approvedDoctors, color: "text-blue-700" },
+      { label: "Pending approvals", value: approvalRequests.length, color: "text-amber-700" },
+    ].map(({ label, value, color }) => (
+      <div class="rounded-xl border border-[var(--color-border)] bg-white p-4 text-center">
+        <div class={`text-2xl font-bold ${color}`}>{value}</div>
+        <div class="mt-1 text-xs text-[var(--color-muted)]">{label}</div>
+      </div>
+    ))}
+  </div>
+
+  <div class="rounded-2xl border border-[var(--color-border)] bg-white p-5">
+    <div class="mb-4 flex items-center justify-between gap-4">
+      <div>
+        <h2 class="font-semibold">Doctor approvals</h2>
+        <p class="text-sm text-[var(--color-muted)]">Approve or reject new doctor registrations.</p>
+      </div>
+      <span class="rounded-full bg-[var(--color-bg)] px-3 py-1 text-sm font-semibold text-[var(--color-primary)]">
+        {approvalRequests.length}
+      </span>
+    </div>
+
+    {approvalRequests.length === 0 ? (
+      <div class="rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-10 text-center text-sm text-[var(--color-muted)]">
+        No doctor approvals are waiting right now.
+      </div>
+    ) : (
+      <div class="space-y-3">
+        {approvalRequests.map(({ request, doctor, profile }) => (
+          <div class="rounded-xl border border-[var(--color-border)] p-4">
+            <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div class="min-w-0">
+                <p class="font-semibold text-sm">{doctor.name}</p>
+                <p class="mt-1 text-sm text-[var(--color-muted)]">{profile.specialization} · {profile.qualification}</p>
+                <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-muted)]">
+                  <span>Email: {doctor.email}</span>
+                  {doctor.phone && <span>Phone: {doctor.phone}</span>}
+                  <span>Registration: {profile.registrationNumber}</span>
+                  <span>City: {profile.city ?? "—"}</span>
+                  {request.recommendedByUserId && recommenderMap[request.recommendedByUserId] && (
+                    <span>Recommended by: {recommenderMap[request.recommendedByUserId]}</span>
+                  )}
+                  <span>Requested: {new Date(request.requestedAt * 1000).toLocaleDateString("en-IN")}</span>
+                </div>
+              </div>
+              <div class="flex gap-2 shrink-0">
+                <button
+                  type="button"
+                  class="approval-action rounded-lg bg-[var(--color-secondary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-secondary-dark)] transition-colors"
+                  data-action="approve"
+                  data-doctor-id={doctor.id}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  class="approval-action rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-danger)] hover:border-[var(--color-danger)] transition-colors"
+                  data-action="reject"
+                  data-doctor-id={doctor.id}
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+</DashboardLayout>
+
+<script>
+  document.querySelectorAll<HTMLButtonElement>(".approval-action").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const doctorId = button.dataset.doctorId;
+      const action = button.dataset.action;
+      if (!doctorId || !action) return;
+
+      let body: Record<string, string> = {};
+      if (action === "reject") {
+        const notes = window.prompt("Optional reason for rejection", "");
+        body = notes ? { notes } : {};
+      }
+
+      button.disabled = true;
+      try {
+        const res = await fetch(`/api/doctors/approvals/${doctorId}/${action}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Review failed");
+        window.location.reload();
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Review failed");
+        button.disabled = false;
+      }
+    });
+  });
+</script>

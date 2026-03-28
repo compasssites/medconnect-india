@@ -10,7 +10,7 @@ export const users = sqliteTable(
     email: text("email").notNull().unique(),
     phone: text("phone").unique(), // optional contact number
     name: text("name").notNull(),
-    role: text("role", { enum: ["doctor", "patient"] }).notNull(),
+    role: text("role", { enum: ["doctor", "patient", "admin"] }).notNull(),
     avatarUrl: text("avatar_url"),
     createdAt: integer("created_at", { mode: "number" })
       .notNull()

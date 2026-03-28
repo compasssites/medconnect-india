@@ -79,11 +79,15 @@ app.put("/availability", async (c) => {
 
 async function getReviewerContext(c: Context<HonoEnv>) {
   const user = c.get("user" as never) as App.Locals["user"];
-  if (!user || user.role !== "doctor") {
+  if (!user || !["doctor", "admin"].includes(user.role)) {
     return { error: c.json({ error: "Forbidden" }, 403) };
   }
 
   const db = drizzle(c.env.DB);
+  if (user.role === "admin") {
+    return { db, user };
+  }
+
   const reviewerProfile = await db.select().from(doctorProfiles).where(eq(doctorProfiles.userId, user.id)).get();
   if (!reviewerProfile?.isVerified) {
     return { error: c.json({ error: "Only approved doctors can review registrations" }, 403) };
@@ -110,7 +114,7 @@ app.post("/approvals/:doctorUserId/approve", async (c) => {
   if (!request || request.status !== "pending") {
     return c.json({ error: "No pending approval request found" }, 404);
   }
-  if (request.recommendedByUserId && request.recommendedByUserId !== reviewer.user.id) {
+  if (reviewer.user.role !== "admin" && request.recommendedByUserId && request.recommendedByUserId !== reviewer.user.id) {
     return c.json({ error: "This request is assigned to another doctor" }, 403);
   }
 
@@ -155,7 +159,7 @@ app.post("/approvals/:doctorUserId/reject", zValidator("json", reviewApprovalSch
   if (!request || request.status !== "pending") {
     return c.json({ error: "No pending approval request found" }, 404);
   }
-  if (request.recommendedByUserId && request.recommendedByUserId !== reviewer.user.id) {
+  if (reviewer.user.role !== "admin" && request.recommendedByUserId && request.recommendedByUserId !== reviewer.user.id) {
     return c.json({ error: "This request is assigned to another doctor" }, 403);
   }
 

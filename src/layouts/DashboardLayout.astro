@@ -3,7 +3,7 @@ import BaseLayout from "./BaseLayout.astro";
 
 interface Props {
   title?: string;
-  role?: "doctor" | "patient";
+  role?: "doctor" | "patient" | "admin";
 }
 
 const { title, role } = Astro.props;
@@ -20,7 +20,12 @@ const patientNav = [
   { href: "/doctors", label: "Find Doctors" },
 ];
 
-const navLinks = role === "doctor" ? doctorNav : patientNav;
+const adminNav = [
+  { href: "/dashboard/admin", label: "Dashboard" },
+  { href: "/doctors", label: "Find Doctors" },
+];
+
+const navLinks = role === "doctor" ? doctorNav : role === "admin" ? adminNav : patientNav;
 ---
 
 <BaseLayout title={title}>
