@@ -6,6 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 MSG91_TEMPLATE_ID = ""
 APP_URL = "https://medconnect.in"
+SES_FROM_EMAIL = "forms@mycompass.in"
 
 # Secrets (set via `wrangler secret put`):
 # MSG91_AUTH_KEY
@@ -41,3 +42,18 @@ directory = "./dist"
 binding = "ASSETS"
 html_handling = "auto-trailing-slash"
 not_found_handling = "404-page"
+
+[[secrets_store_secrets]]
+binding = "AWS_SES_ACCESS_KEY_ID"
+store_id = "07f5856b582c4503811d8d1e7ac2e18f"
+secret_name = "AWS_SES_ACCESS_KEY_ID"
+
+[[secrets_store_secrets]]
+binding = "AWS_SES_SECRET_ACCESS_KEY"
+store_id = "07f5856b582c4503811d8d1e7ac2e18f"
+secret_name = "AWS_SES_SECRET_ACCESS_KEY"
+
+[[secrets_store_secrets]]
+binding = "AWS_SES_REGION"
+store_id = "07f5856b582c4503811d8d1e7ac2e18f"
+secret_name = "AWS_SES_REGION"

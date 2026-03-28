@@ -20,10 +20,10 @@ async function hasEmailProviderConfigured(env: HonoEnv["Bindings"]) {
   };
 
   const [accessKeyId, secretAccessKey, region, from] = await Promise.all([
-    maybeGet(env.AWS_ACCESS_KEY_ID),
-    maybeGet(env.AWS_SECRET_ACCESS_KEY),
-    maybeGet(env.AWS_REGION),
-    maybeGet(env.AWS_SES_FROM_EMAIL),
+    maybeGet(env.AWS_SES_ACCESS_KEY_ID ?? env.AWS_ACCESS_KEY_ID),
+    maybeGet(env.AWS_SES_SECRET_ACCESS_KEY ?? env.AWS_SECRET_ACCESS_KEY),
+    maybeGet(env.AWS_SES_REGION ?? env.AWS_REGION),
+    maybeGet(env.SES_FROM_EMAIL ?? env.AWS_SES_FROM_EMAIL),
   ]);
 
   return Boolean(accessKeyId && secretAccessKey && region && from);

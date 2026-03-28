@@ -3,6 +3,10 @@ import { AwsClient } from "aws4fetch";
 type SecretValue = string | { get(): Promise<string> } | undefined;
 
 type OtpEmailEnv = {
+  AWS_SES_ACCESS_KEY_ID?: SecretValue;
+  AWS_SES_SECRET_ACCESS_KEY?: SecretValue;
+  AWS_SES_REGION?: SecretValue;
+  SES_FROM_EMAIL?: SecretValue;
   AWS_ACCESS_KEY_ID?: SecretValue;
   AWS_SECRET_ACCESS_KEY?: SecretValue;
   AWS_REGION?: SecretValue;
@@ -26,10 +30,18 @@ export async function sendOtp(
   otp: string,
   env?: OtpEmailEnv
 ): Promise<{ devOtp: string }> {
-  const accessKeyId = await resolveSecret(env?.AWS_ACCESS_KEY_ID);
-  const secretAccessKey = await resolveSecret(env?.AWS_SECRET_ACCESS_KEY);
-  const region = await resolveSecret(env?.AWS_REGION);
-  const from = await resolveSecret(env?.AWS_SES_FROM_EMAIL);
+  const accessKeyId =
+    (await resolveSecret(env?.AWS_SES_ACCESS_KEY_ID)) ??
+    (await resolveSecret(env?.AWS_ACCESS_KEY_ID));
+  const secretAccessKey =
+    (await resolveSecret(env?.AWS_SES_SECRET_ACCESS_KEY)) ??
+    (await resolveSecret(env?.AWS_SECRET_ACCESS_KEY));
+  const region =
+    (await resolveSecret(env?.AWS_SES_REGION)) ??
+    (await resolveSecret(env?.AWS_REGION));
+  const from =
+    (await resolveSecret(env?.SES_FROM_EMAIL)) ??
+    (await resolveSecret(env?.AWS_SES_FROM_EMAIL));
 
   if (!accessKeyId || !secretAccessKey || !region || !from) {
     return { devOtp: otp };

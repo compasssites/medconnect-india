@@ -19,6 +19,10 @@ type Bindings = {
   FILES: R2Bucket;
   SESSIONS: KVNamespace;
   CHAT_ROOMS: DurableObjectNamespace<ChatRoom>;
+  AWS_SES_ACCESS_KEY_ID?: string | SecretStoreBinding;
+  AWS_SES_SECRET_ACCESS_KEY?: string | SecretStoreBinding;
+  AWS_SES_REGION?: string | SecretStoreBinding;
+  SES_FROM_EMAIL?: string | SecretStoreBinding;
   AWS_ACCESS_KEY_ID?: string | SecretStoreBinding;
   AWS_SECRET_ACCESS_KEY?: string | SecretStoreBinding;
   AWS_REGION?: string | SecretStoreBinding;
