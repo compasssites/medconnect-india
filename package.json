@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "deploy": "npm run build && npx wrangler deploy",
+    "deploy:do": "npx wrangler deploy --config wrangler.chat-do.toml",
+    "deploy:app": "npm run build && npx wrangler deploy",
+    "deploy": "npm run deploy:do && npm run deploy:app",
     "preview": "astro preview",
     "astro": "astro",
     "db:generate": "drizzle-kit generate",

@@ -25,13 +25,8 @@ bucket_name = "medconnect-files"
 binding = "SESSIONS"
 id = "b2fab377ec7047c6948f84f6fd581489"
 
+# ChatRoom DO is defined in medconnect-chat-do worker, referenced here by script_name
 [durable_objects]
 bindings = [
-  { name = "CHAT_ROOMS", class_name = "ChatRoom" }
+  { name = "CHAT_ROOMS", class_name = "ChatRoom", script_name = "medconnect-chat-do" }
 ]
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["ChatRoom"]
-
-# Assets are bundled into _worker.js by @astrojs/cloudflare — no separate assets dir needed

@@ -22,6 +22,7 @@ const updateProfileSchema = z.object({
   paymentMode: z.enum(["prepaid", "postpaid", "flexible"]).optional(),
   upiId: z.string().regex(/^[a-zA-Z0-9._-]+@[a-zA-Z]{2,}$/).optional().or(z.literal("")),
   terms: z.string().max(2000).optional(),
+  availableHours: z.record(z.string(), z.array(z.string())).optional(),
 });
 
 // PUT /api/doctors/profile
@@ -50,14 +51,15 @@ app.put("/profile", zValidator("json", updateProfileSchema), async (c) => {
   if (data.paymentMode !== undefined) profileUpdate.paymentMode = data.paymentMode;
   if (data.upiId !== undefined) profileUpdate.upiId = data.upiId || null;
   if (data.terms !== undefined) profileUpdate.terms = data.terms;
+  if (data.availableHours !== undefined) profileUpdate.availableHours = JSON.stringify(data.availableHours);
 
   await db.update(doctorProfiles).set(profileUpdate as Parameters<typeof db.update>[0]).where(eq(doctorProfiles.userId, user.id));
 
   return c.json({ success: true });
 });
 
-// POST /api/doctors/availability
-app.post("/availability", async (c) => {
+// PUT /api/doctors/availability
+app.put("/availability", async (c) => {
   const user = c.get("user" as never) as App.Locals["user"];
   if (!user || user.role !== "doctor") return c.json({ error: "Forbidden" }, 403);
 

@@ -1,0 +1,159 @@
+---
+import DashboardLayout from "../../../layouts/DashboardLayout.astro";
+import { getSessionUser } from "../../../lib/auth/session";
+import { getDoctorProfileByUserId } from "../../../lib/db/queries";
+
+const env = (Astro.locals as App.Locals).runtime?.env;
+const sessionCookie = Astro.cookies.get("session")?.value;
+if (!sessionCookie || !env) return Astro.redirect("/auth/login");
+
+const currentUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
+if (!currentUser || currentUser.role !== "doctor") return Astro.redirect("/auth/login");
+
+const profile = await getDoctorProfileByUserId(env.DB, currentUser.id);
+if (!profile) return Astro.redirect("/dashboard/doctor");
+
+const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const dayLabels: Record<string, string> = {
+  mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday",
+  fri: "Friday", sat: "Saturday", sun: "Sunday",
+};
+
+type AvailableHours = Record<string, string[]>;
+const availableHours: AvailableHours = profile.availableHours ? JSON.parse(profile.availableHours) : {};
+---
+
+<DashboardLayout title="Settings — MedConnect" role="doctor">
+  <div class="max-w-xl mx-auto space-y-6">
+    <h1 class="text-xl font-bold">Settings</h1>
+
+    <!-- Availability toggle -->
+    <div class="bg-white rounded-2xl border border-[var(--color-border)] p-6">
+      <h2 class="font-semibold mb-4">Availability</h2>
+      <div class="flex items-center gap-4">
+        <button id="avail-toggle"
+          class={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 ${profile.isAvailable ? "bg-[var(--color-secondary)]" : "bg-gray-300"}`}
+          role="switch" aria-checked={profile.isAvailable ? "true" : "false"}
+          data-available={profile.isAvailable ? "1" : "0"}>
+          <span class={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${profile.isAvailable ? "translate-x-6" : "translate-x-1"}`}></span>
+        </button>
+        <span id="avail-label" class="text-sm font-medium">
+          {profile.isAvailable ? "Accepting new consultations" : "Not available right now"}
+        </span>
+      </div>
+      <p id="avail-status" class="text-xs text-[var(--color-muted)] mt-2"></p>
+    </div>
+
+    <!-- Available hours -->
+    <form id="hours-form" class="bg-white rounded-2xl border border-[var(--color-border)] p-6 space-y-4">
+      <h2 class="font-semibold">Available Hours</h2>
+      <p class="text-xs text-[var(--color-muted)]">Enter time ranges per day (e.g. 09:00-13:00). Leave blank if not available that day.</p>
+
+      {days.map((day) => (
+        <div class="flex items-center gap-4">
+          <span class="text-sm font-medium w-24 shrink-0">{dayLabels[day]}</span>
+          <input
+            id={`hours-${day}`}
+            type="text"
+            placeholder="09:00-13:00, 17:00-20:00"
+            value={(availableHours[day] ?? []).join(", ")}
+            class="flex-1 px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          />
+        </div>
+      ))}
+
+      <p id="hours-error" class="text-sm text-[var(--color-danger)] hidden"></p>
+      <p id="hours-success" class="text-sm text-[var(--color-secondary)] hidden">Hours saved!</p>
+
+      <button type="submit" id="hours-btn"
+        class="px-5 py-2 rounded-xl bg-[var(--color-primary)] text-white text-sm font-semibold hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-60">
+        Save Hours
+      </button>
+    </form>
+
+    <!-- Account -->
+    <div class="bg-gray-50 rounded-2xl border border-[var(--color-border)] p-4">
+      <p class="text-xs text-[var(--color-muted)]">Phone: <strong>{currentUser.phone}</strong> · Registration: <strong>{profile.registrationNumber}</strong></p>
+      <p class="text-xs text-[var(--color-muted)] mt-1">Profile URL: <a href={`/doctors/${profile.slug}`} class="text-[var(--color-primary)] hover:underline">/doctors/{profile.slug}</a></p>
+    </div>
+  </div>
+</DashboardLayout>
+
+<script>
+  const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+  // Availability toggle
+  const toggleBtn = document.getElementById("avail-toggle") as HTMLButtonElement;
+  const availLabel = document.getElementById("avail-label")!;
+  const availStatus = document.getElementById("avail-status")!;
+
+  toggleBtn.addEventListener("click", async () => {
+    const current = toggleBtn.dataset.available === "1";
+    const next = !current;
+    toggleBtn.disabled = true;
+
+    try {
+      const res = await fetch("/api/doctors/availability", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isAvailable: next }),
+      });
+      if (!res.ok) throw new Error("Failed");
+
+      toggleBtn.dataset.available = next ? "1" : "0";
+      toggleBtn.setAttribute("aria-checked", next ? "true" : "false");
+
+      const dot = toggleBtn.querySelector("span") as HTMLSpanElement;
+      if (next) {
+        toggleBtn.classList.replace("bg-gray-300", "bg-[var(--color-secondary)]");
+        dot.classList.replace("translate-x-1", "translate-x-6");
+        availLabel.textContent = "Accepting new consultations";
+      } else {
+        toggleBtn.classList.replace("bg-[var(--color-secondary)]", "bg-gray-300");
+        dot.classList.replace("translate-x-6", "translate-x-1");
+        availLabel.textContent = "Not available right now";
+      }
+      availStatus.textContent = "Saved";
+      setTimeout(() => { availStatus.textContent = ""; }, 2000);
+    } catch {
+      availStatus.textContent = "Failed to update";
+    } finally {
+      toggleBtn.disabled = false;
+    }
+  });
+
+  // Hours form
+  document.getElementById("hours-form")!.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("hours-btn") as HTMLButtonElement;
+    const err = document.getElementById("hours-error")!;
+    const ok = document.getElementById("hours-success")!;
+    err.classList.add("hidden");
+    ok.classList.add("hidden");
+    btn.disabled = true;
+
+    const availableHours: Record<string, string[]> = {};
+    for (const day of days) {
+      const raw = (document.getElementById(`hours-${day}`) as HTMLInputElement).value.trim();
+      if (raw) {
+        availableHours[day] = raw.split(",").map((s) => s.trim()).filter(Boolean);
+      }
+    }
+
+    try {
+      const res = await fetch("/api/doctors/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ availableHours }),
+      });
+      const data = await res.json<{ error?: string }>();
+      if (!res.ok) throw new Error(data.error ?? "Save failed");
+      ok.classList.remove("hidden");
+    } catch (ex: unknown) {
+      err.textContent = ex instanceof Error ? ex.message : "Save failed";
+      err.classList.remove("hidden");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>

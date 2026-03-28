@@ -1,0 +1,141 @@
+---
+import DashboardLayout from "../../../layouts/DashboardLayout.astro";
+import { getSessionUser } from "../../../lib/auth/session";
+import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
+import { patientProfiles } from "../../../lib/db/schema";
+
+const env = (Astro.locals as App.Locals).runtime?.env;
+const sessionCookie = Astro.cookies.get("session")?.value;
+if (!sessionCookie || !env) return Astro.redirect("/auth/login");
+
+const currentUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
+if (!currentUser || currentUser.role !== "patient") return Astro.redirect("/auth/login");
+
+const db = drizzle(env.DB);
+const profile = await db.select().from(patientProfiles).where(eq(patientProfiles.userId, currentUser.id)).get();
+---
+
+<DashboardLayout title="My Profile — MedConnect" role="patient">
+  <div class="max-w-xl mx-auto">
+    <h1 class="text-xl font-bold mb-6">My Profile</h1>
+
+    <form id="profile-form" class="space-y-6">
+      <div class="bg-white rounded-2xl border border-[var(--color-border)] p-6 space-y-4">
+        <h2 class="font-semibold">Personal Information</h2>
+
+        <div>
+          <label class="block text-sm font-medium mb-1.5">Full name</label>
+          <input id="name" type="text" value={currentUser.name} required
+            class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1.5">Date of birth</label>
+            <input id="dob" type="date" value={profile?.dateOfBirth ?? ""}
+              class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1.5">Gender</label>
+            <select id="gender" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]">
+              <option value="">— select —</option>
+              {["male","female","other"].map((g) => (
+                <option value={g} selected={profile?.gender === g}>{g.charAt(0).toUpperCase()+g.slice(1)}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1.5">Blood group</label>
+            <select id="blood" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]">
+              <option value="">— select —</option>
+              {["A+","A-","B+","B-","AB+","AB-","O+","O-"].map((bg) => (
+                <option value={bg} selected={profile?.bloodGroup === bg}>{bg}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1.5">City</label>
+            <input id="city" type="text" value={profile?.city ?? ""}
+              class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium mb-1.5">State</label>
+          <input id="state" type="text" value={profile?.state ?? ""}
+            class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-[var(--color-border)] p-6 space-y-4">
+        <h2 class="font-semibold">Medical Background <span class="text-xs font-normal text-[var(--color-muted)]">(optional — helps doctors)</span></h2>
+
+        <div>
+          <label class="block text-sm font-medium mb-1.5">Medical history summary</label>
+          <textarea id="history" rows="4" maxlength="2000"
+            placeholder="e.g. Diabetic since 2018, hypertension, allergic to penicillin…"
+            class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] resize-y"
+          >{profile?.medicalHistory ?? ""}</textarea>
+        </div>
+      </div>
+
+      <div class="bg-gray-50 rounded-2xl border border-[var(--color-border)] p-4">
+        <p class="text-xs text-[var(--color-muted)]">Phone: <strong>{currentUser.phone}</strong> · This cannot be changed.</p>
+      </div>
+
+      <p id="save-error" class="text-sm text-[var(--color-danger)] hidden"></p>
+      <p id="save-success" class="text-sm text-[var(--color-secondary)] hidden">Profile saved!</p>
+
+      <button type="submit" id="save-btn"
+        class="px-6 py-2.5 rounded-xl bg-[var(--color-primary)] text-white font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-60">
+        Save Changes
+      </button>
+    </form>
+  </div>
+</DashboardLayout>
+
+<script>
+  document.getElementById("profile-form")!.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("save-btn") as HTMLButtonElement;
+    const err = document.getElementById("save-error")!;
+    const ok = document.getElementById("save-success")!;
+    err.classList.add("hidden");
+    ok.classList.add("hidden");
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+
+    const gender = (document.getElementById("gender") as HTMLSelectElement).value;
+    const bloodGroup = (document.getElementById("blood") as HTMLSelectElement).value;
+    const dob = (document.getElementById("dob") as HTMLInputElement).value;
+
+    try {
+      const res = await fetch("/api/patients/me", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: (document.getElementById("name") as HTMLInputElement).value.trim(),
+          dateOfBirth: dob || undefined,
+          gender: gender || undefined,
+          bloodGroup: bloodGroup || undefined,
+          city: (document.getElementById("city") as HTMLInputElement).value.trim() || undefined,
+          state: (document.getElementById("state") as HTMLInputElement).value.trim() || undefined,
+          medicalHistory: (document.getElementById("history") as HTMLTextAreaElement).value.trim() || undefined,
+        }),
+      });
+      const data = await res.json<{ error?: string }>();
+      if (!res.ok) throw new Error(data.error ?? "Save failed");
+      ok.classList.remove("hidden");
+    } catch (ex: unknown) {
+      err.textContent = ex instanceof Error ? ex.message : "Save failed";
+      err.classList.remove("hidden");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Save Changes";
+    }
+  });
+</script>
