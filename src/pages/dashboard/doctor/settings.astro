@@ -73,7 +73,11 @@ const availableHours: AvailableHours = profile.availableHours ? JSON.parse(profi
 
     <!-- Account -->
     <div class="bg-gray-50 rounded-2xl border border-[var(--color-border)] p-4">
-      <p class="text-xs text-[var(--color-muted)]">Phone: <strong>{currentUser.phone}</strong> · Registration: <strong>{profile.registrationNumber}</strong></p>
+      <p class="text-xs text-[var(--color-muted)]">
+        Email: <strong>{currentUser.email}</strong>
+        {currentUser.phone ? ` · Phone: ${currentUser.phone}` : ""}
+        {" · "}Registration: <strong>{profile.registrationNumber}</strong>
+      </p>
       <p class="text-xs text-[var(--color-muted)] mt-1">Profile URL: <a href={`/doctors/${profile.slug}`} class="text-[var(--color-primary)] hover:underline">/doctors/{profile.slug}</a></p>
     </div>
   </div>

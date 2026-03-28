@@ -1,9 +1,9 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { users, doctorProfiles } from "../../lib/db/schema";
+import { users, doctorProfiles, doctorApprovalRequests } from "../../lib/db/schema";
 import type { HonoEnv } from "../index";
 
 const app = new Hono<HonoEnv>();
@@ -23,6 +23,10 @@ const updateProfileSchema = z.object({
   upiId: z.string().regex(/^[a-zA-Z0-9._-]+@[a-zA-Z]{2,}$/).optional().or(z.literal("")),
   terms: z.string().max(2000).optional(),
   availableHours: z.record(z.string(), z.array(z.string())).optional(),
+});
+
+const reviewApprovalSchema = z.object({
+  notes: z.string().max(500).optional(),
 });
 
 // PUT /api/doctors/profile
@@ -69,6 +73,112 @@ app.put("/availability", async (c) => {
     .update(doctorProfiles)
     .set({ isAvailable: body.isAvailable, updatedAt: Math.floor(Date.now() / 1000) })
     .where(eq(doctorProfiles.userId, user.id));
+
+  return c.json({ success: true });
+});
+
+async function getReviewerContext(c: Context<HonoEnv>) {
+  const user = c.get("user" as never) as App.Locals["user"];
+  if (!user || user.role !== "doctor") {
+    return { error: c.json({ error: "Forbidden" }, 403) };
+  }
+
+  const db = drizzle(c.env.DB);
+  const reviewerProfile = await db.select().from(doctorProfiles).where(eq(doctorProfiles.userId, user.id)).get();
+  if (!reviewerProfile?.isVerified) {
+    return { error: c.json({ error: "Only approved doctors can review registrations" }, 403) };
+  }
+
+  return { db, user };
+}
+
+app.post("/approvals/:doctorUserId/approve", async (c) => {
+  const reviewer = await getReviewerContext(c);
+  if ("error" in reviewer) return reviewer.error;
+
+  const doctorUserId = c.req.param("doctorUserId");
+  if (doctorUserId === reviewer.user.id) {
+    return c.json({ error: "You cannot review your own registration" }, 400);
+  }
+
+  const request = await reviewer.db
+    .select()
+    .from(doctorApprovalRequests)
+    .where(eq(doctorApprovalRequests.doctorUserId, doctorUserId))
+    .get();
+
+  if (!request || request.status !== "pending") {
+    return c.json({ error: "No pending approval request found" }, 404);
+  }
+  if (request.recommendedByUserId && request.recommendedByUserId !== reviewer.user.id) {
+    return c.json({ error: "This request is assigned to another doctor" }, 403);
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  await reviewer.db
+    .update(doctorApprovalRequests)
+    .set({
+      status: "approved",
+      reviewedByUserId: reviewer.user.id,
+      reviewedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(doctorApprovalRequests.doctorUserId, doctorUserId));
+
+  await reviewer.db
+    .update(doctorProfiles)
+    .set({
+      isVerified: true,
+      verifiedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(doctorProfiles.userId, doctorUserId));
+
+  return c.json({ success: true });
+});
+
+app.post("/approvals/:doctorUserId/reject", zValidator("json", reviewApprovalSchema), async (c) => {
+  const reviewer = await getReviewerContext(c);
+  if ("error" in reviewer) return reviewer.error;
+
+  const doctorUserId = c.req.param("doctorUserId");
+  if (doctorUserId === reviewer.user.id) {
+    return c.json({ error: "You cannot review your own registration" }, 400);
+  }
+
+  const request = await reviewer.db
+    .select()
+    .from(doctorApprovalRequests)
+    .where(eq(doctorApprovalRequests.doctorUserId, doctorUserId))
+    .get();
+
+  if (!request || request.status !== "pending") {
+    return c.json({ error: "No pending approval request found" }, 404);
+  }
+  if (request.recommendedByUserId && request.recommendedByUserId !== reviewer.user.id) {
+    return c.json({ error: "This request is assigned to another doctor" }, 403);
+  }
+
+  const { notes } = c.req.valid("json");
+  const now = Math.floor(Date.now() / 1000);
+  await reviewer.db
+    .update(doctorApprovalRequests)
+    .set({
+      status: "rejected",
+      reviewNotes: notes,
+      reviewedByUserId: reviewer.user.id,
+      reviewedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(doctorApprovalRequests.doctorUserId, doctorUserId));
+
+  await reviewer.db
+    .update(doctorProfiles)
+    .set({
+      isAvailable: false,
+      updatedAt: now,
+    })
+    .where(eq(doctorProfiles.userId, doctorUserId));
 
   return c.json({ success: true });
 });

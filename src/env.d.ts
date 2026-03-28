@@ -6,8 +6,10 @@ type Bindings = {
   FILES: R2Bucket;
   SESSIONS: KVNamespace;
   CHAT_ROOMS: DurableObjectNamespace;
-  MSG91_AUTH_KEY: string;
-  MSG91_TEMPLATE_ID: string;
+  AWS_ACCESS_KEY_ID?: string;
+  AWS_SECRET_ACCESS_KEY?: string;
+  AWS_REGION?: string;
+  AWS_SES_FROM_EMAIL?: string;
   SESSION_SECRET: string;
   APP_URL: string;
 };
@@ -19,7 +21,8 @@ declare namespace App {
     };
     user?: {
       id: string;
-      phone: string;
+      email: string;
+      phone?: string | null;
       name: string;
       role: "doctor" | "patient";
     };

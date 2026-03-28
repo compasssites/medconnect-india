@@ -17,28 +17,22 @@ if (session?.value) {
 <AuthLayout title="Sign in — MedConnect">
   <div class="bg-white rounded-2xl border border-[var(--color-border)] shadow-sm p-8">
     <h1 class="text-2xl font-bold mb-1">Welcome back</h1>
-    <p class="text-[var(--color-muted)] text-sm mb-8">Enter your mobile number to continue</p>
+    <p class="text-[var(--color-muted)] text-sm mb-8">Enter your email address to continue</p>
 
-    <!-- Step 1: Phone input -->
-    <div id="step-phone">
-      <form id="phone-form" novalidate>
+    <!-- Step 1: Email input -->
+    <div id="step-email">
+      <form id="email-form" novalidate>
         <div class="mb-4">
-          <label for="phone" class="block text-sm font-medium mb-1.5">Mobile number</label>
-          <div class="flex gap-2">
-            <span class="inline-flex items-center px-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-sm text-[var(--color-muted)] select-none">+91</span>
-            <input
-              id="phone"
-              type="tel"
-              inputmode="numeric"
-              pattern="[6-9][0-9]{9}"
-              maxlength="10"
-              placeholder="98765 43210"
-              autocomplete="tel-national"
-              required
-              class="flex-1 px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
-            />
-          </div>
-          <p id="phone-error" class="text-xs text-[var(--color-danger)] mt-1 hidden"></p>
+          <label for="email" class="block text-sm font-medium mb-1.5">Email address</label>
+          <input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
+            autocomplete="email"
+            required
+            class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
+          />
+          <p id="email-error" class="text-xs text-[var(--color-danger)] mt-1 hidden"></p>
         </div>
         <button
           type="submit"
@@ -53,12 +47,12 @@ if (session?.value) {
     <!-- Step 2: OTP input (hidden initially) -->
     <div id="step-otp" class="hidden">
       <p class="text-sm text-[var(--color-muted)] mb-3">
-        Enter the code for <span id="otp-phone-display" class="font-medium text-[var(--color-text)]"></span>.
-        <button id="change-phone" class="text-[var(--color-primary)] underline ml-1">Change</button>
+        Enter the code for <span id="otp-email-display" class="font-medium text-[var(--color-text)]"></span>.
+        <button id="change-email" class="text-[var(--color-primary)] underline ml-1">Change</button>
       </p>
-      <!-- Dev/MVP: shows OTP inline when SMS is not configured -->
+      <!-- Dev/MVP: shows OTP inline when email is not configured -->
       <div id="dev-otp-banner" class="hidden mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-        <p class="text-xs text-amber-700 font-medium mb-0.5">SMS not configured — your code:</p>
+        <p class="text-xs text-amber-700 font-medium mb-0.5">Email sending not configured — your code:</p>
         <p id="dev-otp-value" class="text-2xl font-mono font-bold tracking-widest text-amber-900"></p>
       </div>
       <form id="otp-form" novalidate>
@@ -102,22 +96,22 @@ if (session?.value) {
 </AuthLayout>
 
 <script>
-  const stepPhone = document.getElementById("step-phone")!;
+  const stepEmail = document.getElementById("step-email")!;
   const stepOtp = document.getElementById("step-otp")!;
-  const phoneInput = document.getElementById("phone") as HTMLInputElement;
+  const emailInput = document.getElementById("email") as HTMLInputElement;
   const otpInput = document.getElementById("otp") as HTMLInputElement;
-  const phoneError = document.getElementById("phone-error")!;
+  const emailError = document.getElementById("email-error")!;
   const otpError = document.getElementById("otp-error")!;
-  const otpPhoneDisplay = document.getElementById("otp-phone-display")!;
+  const otpEmailDisplay = document.getElementById("otp-email-display")!;
   const sendBtn = document.getElementById("send-btn") as HTMLButtonElement;
   const verifyBtn = document.getElementById("verify-btn") as HTMLButtonElement;
   const resendBtn = document.getElementById("resend-btn") as HTMLButtonElement;
   const resendTimer = document.getElementById("resend-timer")!;
-  const changePhone = document.getElementById("change-phone")!;
+  const changeEmail = document.getElementById("change-email")!;
   const devOtpBanner = document.getElementById("dev-otp-banner")!;
   const devOtpValue = document.getElementById("dev-otp-value")!;
 
-  let currentPhone = "";
+  let currentEmail = "";
   let resendCountdown: ReturnType<typeof setInterval> | null = null;
 
   function showError(el: HTMLElement, msg: string) {
@@ -143,22 +137,22 @@ if (session?.value) {
     }, 1000);
   }
 
-  async function sendOtp(phone: string) {
+  async function sendOtp(email: string) {
     sendBtn.disabled = true;
     sendBtn.textContent = "Sending…";
-    clearError(phoneError);
+    clearError(emailError);
     try {
       const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ email }),
       });
       const data = await res.json<{ error?: string; otp?: string }>();
       if (!res.ok) throw new Error(data.error ?? "Failed to send OTP");
 
-      currentPhone = phone;
-      otpPhoneDisplay.textContent = "+91 " + phone.slice(0, 5) + " " + phone.slice(5);
-      stepPhone.classList.add("hidden");
+      currentEmail = email;
+      otpEmailDisplay.textContent = email;
+      stepEmail.classList.add("hidden");
       stepOtp.classList.remove("hidden");
 
       // MVP: show OTP inline when SMS is not configured
@@ -173,21 +167,21 @@ if (session?.value) {
       otpInput.focus();
       startResendTimer();
     } catch (e: unknown) {
-      showError(phoneError, e instanceof Error ? e.message : "Failed to send OTP");
+      showError(emailError, e instanceof Error ? e.message : "Failed to send OTP");
     } finally {
       sendBtn.disabled = false;
       sendBtn.textContent = "Send OTP";
     }
   }
 
-  document.getElementById("phone-form")!.addEventListener("submit", async (e) => {
+  document.getElementById("email-form")!.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const raw = phoneInput.value.replace(/\D/g, "");
-    if (!/^[6-9]\d{9}$/.test(raw)) {
-      showError(phoneError, "Enter a valid 10-digit Indian mobile number");
+    const email = emailInput.value.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showError(emailError, "Enter a valid email address");
       return;
     }
-    await sendOtp("+91" + raw);
+    await sendOtp(email);
   });
 
   document.getElementById("otp-form")!.addEventListener("submit", async (e) => {
@@ -204,7 +198,7 @@ if (session?.value) {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: currentPhone, otp }),
+        body: JSON.stringify({ email: currentEmail, otp }),
       });
       const data = await res.json<{ isNewUser?: boolean; user?: { role: string } | null; error?: string }>();
       if (!res.ok) throw new Error(data.error ?? "Verification failed");
@@ -221,14 +215,14 @@ if (session?.value) {
     }
   });
 
-  resendBtn.addEventListener("click", () => sendOtp(currentPhone));
+  resendBtn.addEventListener("click", () => sendOtp(currentEmail));
 
-  changePhone.addEventListener("click", () => {
+  changeEmail.addEventListener("click", () => {
     stepOtp.classList.add("hidden");
-    stepPhone.classList.remove("hidden");
+    stepEmail.classList.remove("hidden");
     if (resendCountdown) clearInterval(resendCountdown);
     otpInput.value = "";
     clearError(otpError);
-    phoneInput.focus();
+    emailInput.focus();
   });
 </script>

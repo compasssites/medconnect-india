@@ -1,9 +1,11 @@
 ---
 import AuthLayout from "../../layouts/AuthLayout.astro";
+import { listApprovedDoctors } from "../../lib/db/queries";
 
 // Must have a valid session (just verified OTP)
 const session = Astro.cookies.get("session");
 if (!session?.value) return Astro.redirect("/auth/login");
+const env = (Astro.locals as App.Locals).runtime?.env;
 
 const res = await fetch(`${Astro.url.origin}/api/auth/me`, {
   headers: { cookie: `session=${session.value}` },
@@ -11,12 +13,14 @@ const res = await fetch(`${Astro.url.origin}/api/auth/me`, {
 const data = await res.json<{ user: { role: string } | null }>();
 // Already registered → go to dashboard
 if (data.user?.role) return Astro.redirect(`/dashboard/${data.user.role}`);
+
+const approvedDoctors = env ? await listApprovedDoctors(env.DB) : [];
 ---
 
 <AuthLayout title="Create your account — MedConnect">
   <div class="bg-white rounded-2xl border border-[var(--color-border)] shadow-sm p-8">
     <h1 class="text-2xl font-bold mb-1">Create your account</h1>
-    <p class="text-[var(--color-muted)] text-sm mb-8">Choose how you want to use MedConnect</p>
+    <p class="text-[var(--color-muted)] text-sm mb-8">Choose how you want to use MedConnect. You'll sign in with your verified email.</p>
 
     <!-- Role selection -->
     <div id="step-role">
@@ -68,6 +72,19 @@ if (data.user?.role) return Astro.redirect(`/dashboard/${data.user.role}`);
           <p id="name-error" class="text-xs text-[var(--color-danger)] mt-1 hidden"></p>
         </div>
 
+        <div class="mb-4">
+          <label for="phone" class="block text-sm font-medium mb-1.5">Mobile number <span class="text-[var(--color-muted)] font-normal">(optional)</span></label>
+          <input
+            id="phone"
+            name="phone"
+            type="tel"
+            inputmode="numeric"
+            placeholder="+91 98765 43210"
+            autocomplete="tel"
+            class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
+          />
+        </div>
+
         <!-- Doctor-only fields -->
         <div id="doctor-fields" class="hidden space-y-4">
           <div>
@@ -104,6 +121,25 @@ if (data.user?.role) return Astro.redirect(`/dashboard/${data.user.role}`);
                 class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent" />
             </div>
           </div>
+          {approvedDoctors.length > 0 ? (
+            <div>
+              <label for="recommended-by" class="block text-sm font-medium mb-1.5">Recommended by</label>
+              <select id="recommended-by" name="recommendedByUserId"
+                class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent">
+                <option value="">Choose an approved doctor</option>
+                {approvedDoctors.map((doctor) => (
+                  <option value={doctor.userId}>
+                    {doctor.name} · {doctor.specialization}{doctor.city ? ` · ${doctor.city}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p class="text-xs text-[var(--color-muted)] mt-1">The selected doctor can review and approve your registration.</p>
+            </div>
+          ) : (
+            <div class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800">
+              No approved doctors are available yet. The first verified doctor account will be approved directly.
+            </div>
+          )}
         </div>
 
         <p id="form-error" class="text-xs text-[var(--color-danger)] mt-2 mb-3 hidden"></p>
@@ -175,7 +211,11 @@ if (data.user?.role) return Astro.redirect(`/dashboard/${data.user.role}`);
       return;
     }
 
-    const body: Record<string, string> = { name, role: selectedRole };
+    const body: Record<string, string> = {
+      name,
+      role: selectedRole,
+      phone: (document.getElementById("phone") as HTMLInputElement).value.trim(),
+    };
     if (selectedRole === "doctor") {
       body.specialization = (document.getElementById("specialization") as HTMLInputElement).value.trim();
       body.qualification = (document.getElementById("qualification") as HTMLInputElement).value.trim();
@@ -183,9 +223,16 @@ if (data.user?.role) return Astro.redirect(`/dashboard/${data.user.role}`);
       body.registrationCouncil = (document.getElementById("reg-council") as HTMLInputElement).value.trim();
       body.city = (document.getElementById("city") as HTMLInputElement).value.trim();
       body.state = (document.getElementById("state") as HTMLInputElement).value.trim();
+      const recommendedBy = document.getElementById("recommended-by") as HTMLSelectElement | null;
+      if (recommendedBy) body.recommendedByUserId = recommendedBy.value.trim();
 
       if (!body.specialization || !body.qualification || !body.registrationNumber || !body.registrationCouncil) {
         formError.textContent = "Please fill all required doctor fields";
+        formError.classList.remove("hidden");
+        return;
+      }
+      if (recommendedBy && !body.recommendedByUserId) {
+        formError.textContent = "Please choose an approved doctor for review";
         formError.classList.remove("hidden");
         return;
       }
@@ -200,7 +247,7 @@ if (data.user?.role) return Astro.redirect(`/dashboard/${data.user.role}`);
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json<{ error?: string; role?: string }>();
+      const data = await res.json<{ error?: string; role?: string; approvalStatus?: string }>();
       if (!res.ok) throw new Error(data.error ?? "Registration failed");
       window.location.href = `/dashboard/${data.role}`;
     } catch (err: unknown) {

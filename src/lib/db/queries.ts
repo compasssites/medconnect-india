@@ -1,10 +1,11 @@
-import { eq, and, like, sql } from "drizzle-orm";
+import { eq, and, like, sql, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import {
   users,
   doctorProfiles,
   patientProfiles,
   consultations,
+  doctorApprovalRequests,
   type User,
   type DoctorProfile,
   type Consultation,
@@ -16,9 +17,9 @@ export function getDb(d1: D1Database) {
 
 // ─── User queries ────────────────────────────────────────────────────────────
 
-export async function getUserByPhone(d1: D1Database, phone: string) {
+export async function getUserByEmail(d1: D1Database, email: string) {
   const db = getDb(d1);
-  return db.select().from(users).where(eq(users.phone, phone)).get();
+  return db.select().from(users).where(eq(users.email, email)).get();
 }
 
 export async function getUserById(d1: D1Database, id: string) {
@@ -62,6 +63,7 @@ export async function searchDoctors(d1: D1Database, params: DoctorSearchParams) 
       sql`(${doctorProfiles.consultationMode} = ${params.consultationMode} OR ${doctorProfiles.consultationMode} = 'both')`
     );
   }
+  conditions.push(eq(doctorProfiles.isVerified, true));
 
   const query = db
     .select({
@@ -82,7 +84,7 @@ export async function getDoctorBySlug(d1: D1Database, slug: string) {
   return db
     .select({
       profile: doctorProfiles,
-      user: { id: users.id, name: users.name, avatarUrl: users.avatarUrl, phone: users.phone },
+      user: { id: users.id, name: users.name, avatarUrl: users.avatarUrl },
     })
     .from(doctorProfiles)
     .innerJoin(users, eq(doctorProfiles.userId, users.id))
@@ -93,6 +95,70 @@ export async function getDoctorBySlug(d1: D1Database, slug: string) {
 export async function getDoctorProfileByUserId(d1: D1Database, userId: string) {
   const db = getDb(d1);
   return db.select().from(doctorProfiles).where(eq(doctorProfiles.userId, userId)).get();
+}
+
+export async function listApprovedDoctors(d1: D1Database) {
+  const db = getDb(d1);
+  return db
+    .select({
+      userId: users.id,
+      name: users.name,
+      specialization: doctorProfiles.specialization,
+      city: doctorProfiles.city,
+      slug: doctorProfiles.slug,
+    })
+    .from(doctorProfiles)
+    .innerJoin(users, eq(doctorProfiles.userId, users.id))
+    .where(eq(doctorProfiles.isVerified, true))
+    .all();
+}
+
+export async function countVerifiedDoctors(d1: D1Database) {
+  const db = getDb(d1);
+  const row = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(doctorProfiles)
+    .where(eq(doctorProfiles.isVerified, true))
+    .get();
+  return row?.count ?? 0;
+}
+
+export async function getDoctorApprovalRequestForDoctor(d1: D1Database, doctorUserId: string) {
+  const db = getDb(d1);
+  return db
+    .select()
+    .from(doctorApprovalRequests)
+    .where(eq(doctorApprovalRequests.doctorUserId, doctorUserId))
+    .get();
+}
+
+export async function getPendingApprovalRequestsForReviewer(d1: D1Database, reviewerUserId: string) {
+  const db = getDb(d1);
+
+  return db
+    .select({
+      request: doctorApprovalRequests,
+      doctor: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        phone: users.phone,
+      },
+      profile: doctorProfiles,
+    })
+    .from(doctorApprovalRequests)
+    .innerJoin(users, eq(doctorApprovalRequests.doctorUserId, users.id))
+    .innerJoin(doctorProfiles, eq(doctorProfiles.userId, users.id))
+    .where(
+      and(
+        eq(doctorApprovalRequests.status, "pending"),
+        or(
+          eq(doctorApprovalRequests.recommendedByUserId, reviewerUserId),
+          sql`${doctorApprovalRequests.recommendedByUserId} IS NULL`
+        )
+      )
+    )
+    .all();
 }
 
 // ─── Consultation queries ────────────────────────────────────────────────────

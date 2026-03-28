@@ -15,8 +15,10 @@ type Bindings = {
   FILES: R2Bucket;
   SESSIONS: KVNamespace;
   CHAT_ROOMS: DurableObjectNamespace<ChatRoom>;
-  MSG91_AUTH_KEY: string;
-  MSG91_TEMPLATE_ID: string;
+  AWS_ACCESS_KEY_ID?: string;
+  AWS_SECRET_ACCESS_KEY?: string;
+  AWS_REGION?: string;
+  AWS_SES_FROM_EMAIL?: string;
   SESSION_SECRET: string;
   APP_URL: string;
 };
@@ -43,6 +45,7 @@ app.route("/api/upload", uploadRoutes);
 app.route("/api/patients", patientRoutes);
 app.use("/api/doctors/profile", authMiddleware);
 app.use("/api/doctors/availability", authMiddleware);
+app.use("/api/doctors/approvals/*", authMiddleware);
 app.route("/api/doctors", doctorProfileRoutes);
 
 // WebSocket upgrade — proxy to ChatRoom Durable Object

@@ -1,10 +1,15 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
 import { getSessionUser } from "../../../lib/auth/session";
-import { getConsultationsForDoctor, getDoctorProfileByUserId } from "../../../lib/db/queries";
+import {
+  getConsultationsForDoctor,
+  getDoctorApprovalRequestForDoctor,
+  getDoctorProfileByUserId,
+  getPendingApprovalRequestsForReviewer,
+} from "../../../lib/db/queries";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { users, doctorProfiles } from "../../../lib/db/schema";
+import { users } from "../../../lib/db/schema";
 
 const env = (Astro.locals as App.Locals).runtime?.env;
 const sessionCookie = Astro.cookies.get("session")?.value;
@@ -21,6 +26,12 @@ const allConsultations = await getConsultationsForDoctor(env.DB, currentUser.id)
 const requests = allConsultations.filter((c) => c.status === "requested");
 const active = allConsultations.filter((c) => ["accepted", "in_progress"].includes(c.status));
 const history = allConsultations.filter((c) => ["completed", "rejected", "cancelled"].includes(c.status));
+const myApprovalRequest = doctorProfile && !doctorProfile.isVerified
+  ? await getDoctorApprovalRequestForDoctor(env.DB, currentUser.id)
+  : null;
+const approvalRequests = doctorProfile?.isVerified
+  ? await getPendingApprovalRequestsForReviewer(env.DB, currentUser.id)
+  : [];
 
 // Fetch patient names for consultations
 const db = drizzle(env.DB);
@@ -30,6 +41,17 @@ for (const id of patientIds) {
   const u = await db.select({ name: users.name }).from(users).where(eq(users.id, id)).get();
   if (u) patientMap[id] = u.name;
 }
+
+const reviewerIds = [...new Set(approvalRequests.map((item) => item.request.recommendedByUserId).filter(Boolean))] as string[];
+const reviewerMap: Record<string, string> = {};
+for (const id of reviewerIds) {
+  const u = await db.select({ name: users.name }).from(users).where(eq(users.id, id)).get();
+  if (u) reviewerMap[id] = u.name;
+}
+
+const recommenderName = myApprovalRequest?.recommendedByUserId
+  ? (await db.select({ name: users.name }).from(users).where(eq(users.id, myApprovalRequest.recommendedByUserId)).get())?.name
+  : null;
 
 const statusColors: Record<string, string> = {
   requested: "bg-amber-50 text-amber-700",
@@ -62,12 +84,80 @@ const statusColors: Record<string, string> = {
     )}
   </div>
 
+  {doctorProfile && !doctorProfile.isVerified && (
+    <div class="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+      <p class="font-semibold text-amber-900">Profile approval pending</p>
+      <p class="mt-1 text-sm text-amber-800">
+        Your doctor profile is not public yet.
+        {myApprovalRequest?.status === "pending"
+          ? recommenderName
+            ? ` Waiting for review from ${recommenderName}.`
+            : " Waiting for review from an approved doctor."
+          : " Review updates will appear here."}
+      </p>
+    </div>
+  )}
+
+  {approvalRequests.length > 0 && (
+    <div class="mb-6 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4">
+      <div class="mb-4 flex items-center justify-between gap-4">
+        <div>
+          <p class="font-semibold text-blue-950">Registration approvals</p>
+          <p class="text-sm text-blue-800">New doctors waiting for your review.</p>
+        </div>
+        <span class="rounded-full bg-white px-3 py-1 text-sm font-semibold text-[var(--color-primary)] shadow-sm">
+          {approvalRequests.length}
+        </span>
+      </div>
+      <div class="space-y-3">
+        {approvalRequests.map(({ request, doctor, profile }) => (
+          <div class="rounded-xl border border-blue-100 bg-white p-4">
+            <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div class="min-w-0">
+                <p class="font-semibold text-sm">{doctor.name}</p>
+                <p class="mt-1 text-sm text-[var(--color-muted)]">{profile.specialization} · {profile.qualification}</p>
+                <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--color-muted)]">
+                  <span>Email: {doctor.email}</span>
+                  {doctor.phone && <span>Phone: {doctor.phone}</span>}
+                  <span>Registration: {profile.registrationNumber}</span>
+                  {request.recommendedByUserId && reviewerMap[request.recommendedByUserId] && (
+                    <span>Recommended by: {reviewerMap[request.recommendedByUserId]}</span>
+                  )}
+                  <span>Requested: {new Date(request.requestedAt * 1000).toLocaleDateString("en-IN")}</span>
+                </div>
+              </div>
+              <div class="flex gap-2 shrink-0">
+                <button
+                  type="button"
+                  class="approval-action rounded-lg bg-[var(--color-secondary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-secondary-dark)] transition-colors"
+                  data-action="approve"
+                  data-doctor-id={doctor.id}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  class="approval-action rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-danger)] hover:border-[var(--color-danger)] transition-colors"
+                  data-action="reject"
+                  data-doctor-id={doctor.id}
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+
   <!-- Stats -->
-  <div class="grid grid-cols-3 gap-4 mb-6">
+  <div class="grid grid-cols-2 gap-4 mb-6 md:grid-cols-4">
     {[
       { label: "Pending requests", value: requests.length, color: "text-amber-600" },
       { label: "Active consultations", value: active.length, color: "text-[var(--color-primary)]" },
       { label: "Completed", value: history.filter(c => c.status === "completed").length, color: "text-[var(--color-secondary)]" },
+      { label: "To review", value: approvalRequests.length, color: "text-blue-700" },
     ].map(({ label, value, color }) => (
       <div class="bg-white rounded-xl border border-[var(--color-border)] p-4 text-center">
         <div class={`text-2xl font-bold ${color}`}>{value}</div>
@@ -185,11 +275,40 @@ const statusColors: Record<string, string> = {
     toggle.addEventListener("click", async () => {
       const isAvailable = toggle.dataset.available === "1";
       const res = await fetch("/api/doctors/availability", {
-        method: "POST",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isAvailable: !isAvailable }),
       });
       if (res.ok) window.location.reload();
     });
   }
+
+  document.querySelectorAll<HTMLButtonElement>(".approval-action").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const doctorId = button.dataset.doctorId;
+      const action = button.dataset.action;
+      if (!doctorId || !action) return;
+
+      let body: Record<string, string> = {};
+      if (action === "reject") {
+        const notes = window.prompt("Optional reason for rejection", "");
+        body = notes ? { notes } : {};
+      }
+
+      button.disabled = true;
+      try {
+        const res = await fetch(`/api/doctors/approvals/${doctorId}/${action}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Review failed");
+        window.location.reload();
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Review failed");
+        button.disabled = false;
+      }
+    });
+  });
 </script>

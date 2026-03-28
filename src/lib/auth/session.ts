@@ -1,16 +1,16 @@
-import { getUserByPhone, getUserById } from "../db/queries";
+import { getUserById } from "../db/queries";
 
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 type PendingSession = {
-  phone: string;
+  email: string;
   userId: null;
   expiresAt: number;
 };
 
 type ActiveSession = {
   userId: string;
-  phone: string;
+  email: string;
   expiresAt: number;
 };
 
@@ -23,12 +23,12 @@ type Session = PendingSession | ActiveSession;
 export async function createSession(
   kv: KVNamespace,
   userId: string | null,
-  phone: string
+  email: string
 ): Promise<string> {
   const token = generateToken();
   const session: Session = {
     userId: userId as string,
-    phone,
+    email,
     expiresAt: Date.now() + SESSION_TTL_SECONDS * 1000,
   };
 

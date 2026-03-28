@@ -1,5 +1,7 @@
 # Copy to .dev.vars for local development (never commit .dev.vars)
-MSG91_AUTH_KEY=your_msg91_auth_key
-MSG91_TEMPLATE_ID=your_msg91_template_id
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_REGION=ap-south-1
+AWS_SES_FROM_EMAIL=forms@mycompass.in
 SESSION_SECRET=a_random_secret_string_at_least_32_chars
 APP_URL=http://localhost:4321

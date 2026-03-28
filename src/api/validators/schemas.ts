@@ -3,13 +3,11 @@ import { z } from "zod";
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 export const sendOtpSchema = z.object({
-  phone: z
-    .string()
-    .regex(/^\+91[6-9]\d{9}$/, "Must be a valid Indian mobile number (+91XXXXXXXXXX)"),
+  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
 });
 
 export const verifyOtpSchema = z.object({
-  phone: z.string().regex(/^\+91[6-9]\d{9}$/),
+  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
   otp: z.string().length(6).regex(/^\d{6}$/, "OTP must be 6 digits"),
 });
 

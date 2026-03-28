@@ -1,10 +1,11 @@
-/**
- * OTP generation — KV-based, no SMS dependency.
- *
- * MVP mode: OTP is returned in the API response and shown on screen.
- * Production: swap sendOtp to call MSG91/Twilio — the KV storage and
- * verify flow don't need to change at all.
- */
+import { AwsClient } from "aws4fetch";
+
+type OtpEmailEnv = {
+  AWS_ACCESS_KEY_ID?: string;
+  AWS_SECRET_ACCESS_KEY?: string;
+  AWS_REGION?: string;
+  AWS_SES_FROM_EMAIL?: string;
+};
 
 export function generateOtp(): string {
   const arr = new Uint32Array(1);
@@ -12,16 +13,62 @@ export function generateOtp(): string {
   return String(arr[0] % 1_000_000).padStart(6, "0");
 }
 
-/**
- * No-op in MVP — returns the OTP so the API can echo it back.
- * Replace this body with a real SMS call when ready.
- */
 export async function sendOtp(
-  _phone: string,
+  email: string,
   otp: string,
-  _env?: { MSG91_AUTH_KEY?: string; MSG91_TEMPLATE_ID?: string }
+  env?: OtpEmailEnv
 ): Promise<{ devOtp: string }> {
-  // TODO: swap with MSG91/Twilio call in production
-  // await sendOtpViaMSG91(env.MSG91_AUTH_KEY, env.MSG91_TEMPLATE_ID, _phone, otp);
-  return { devOtp: otp };
+  const accessKeyId = env?.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = env?.AWS_SECRET_ACCESS_KEY;
+  const region = env?.AWS_REGION;
+  const from = env?.AWS_SES_FROM_EMAIL;
+
+  if (!accessKeyId || !secretAccessKey || !region || !from) {
+    return { devOtp: otp };
+  }
+
+  const client = new AwsClient({
+    accessKeyId,
+    secretAccessKey,
+    service: "ses",
+    region,
+  });
+
+  const response = await client.fetch(`https://email.${region}.amazonaws.com/v2/email/outbound-emails`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      FromEmailAddress: from,
+      Destination: {
+        ToAddresses: [email],
+      },
+      Content: {
+        Simple: {
+          Subject: {
+            Data: "Your MedConnect sign-in code",
+            Charset: "UTF-8",
+          },
+          Body: {
+            Text: {
+              Data: `Your MedConnect sign-in code is ${otp}. It expires in 10 minutes.`,
+              Charset: "UTF-8",
+            },
+            Html: {
+              Data: `<html><body style="font-family:Arial,sans-serif;color:#0f172a"><p>Your MedConnect sign-in code is:</p><p style="font-size:28px;font-weight:700;letter-spacing:0.24em;margin:16px 0">${otp}</p><p>This code expires in 10 minutes.</p></body></html>`,
+              Charset: "UTF-8",
+            },
+          },
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Failed to send OTP email: ${message}`);
+  }
+
+  return { devOtp: "" };
 }

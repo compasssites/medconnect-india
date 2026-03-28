@@ -4,39 +4,40 @@ import { setCookie, deleteCookie, getCookie } from "hono/cookie";
 import { sendOtpSchema, verifyOtpSchema } from "../validators/schemas";
 import { generateOtp, sendOtp } from "../../lib/auth/otp";
 import { createSession, destroySession, getSessionUser } from "../../lib/auth/session";
-import { getUserByPhone } from "../../lib/db/queries";
+import { getUserByEmail } from "../../lib/db/queries";
 import type { HonoEnv } from "../index";
 
 const app = new Hono<HonoEnv>();
 
 // POST /api/auth/send-otp
-// MVP: returns { success, otp } — otp is shown on screen instead of sent via SMS.
-// When MSG91_AUTH_KEY is set in production, swap sendOtp() to call MSG91 and stop returning otp.
 app.post("/send-otp", zValidator("json", sendOtpSchema), async (c) => {
-  const { phone } = c.req.valid("json");
+  const { email } = c.req.valid("json");
+  const normalizedEmail = email.trim().toLowerCase();
 
   const otp = generateOtp();
-  await c.env.SESSIONS.put(`otp:${phone}`, otp, { expirationTtl: 600 });
+  await c.env.SESSIONS.put(`otp:${normalizedEmail}`, otp, { expirationTtl: 600 });
 
-  const { devOtp } = await sendOtp(phone, otp);
+  const { devOtp } = await sendOtp(normalizedEmail, otp, c.env);
 
-  // Always return success. Return devOtp only when no SMS key configured (MVP/dev).
-  const hasSms = Boolean(c.env.MSG91_AUTH_KEY);
-  return c.json({ success: true, ...(hasSms ? {} : { otp: devOtp }) });
+  const hasEmailProvider = Boolean(
+    c.env.AWS_ACCESS_KEY_ID && c.env.AWS_SECRET_ACCESS_KEY && c.env.AWS_REGION && c.env.AWS_SES_FROM_EMAIL
+  );
+  return c.json({ success: true, ...(hasEmailProvider ? {} : { otp: devOtp }) });
 });
 
 // POST /api/auth/verify-otp
 app.post("/verify-otp", zValidator("json", verifyOtpSchema), async (c) => {
-  const { phone, otp } = c.req.valid("json");
+  const { email, otp } = c.req.valid("json");
+  const normalizedEmail = email.trim().toLowerCase();
 
-  const storedOtp = await c.env.SESSIONS.get(`otp:${phone}`);
+  const storedOtp = await c.env.SESSIONS.get(`otp:${normalizedEmail}`);
   if (!storedOtp || storedOtp !== otp) {
     return c.json({ error: "Invalid or expired OTP" }, 400);
   }
-  await c.env.SESSIONS.delete(`otp:${phone}`);
+  await c.env.SESSIONS.delete(`otp:${normalizedEmail}`);
 
-  const user = await getUserByPhone(c.env.DB, phone);
-  const sessionToken = await createSession(c.env.SESSIONS, user?.id ?? null, phone);
+  const user = await getUserByEmail(c.env.DB, normalizedEmail);
+  const sessionToken = await createSession(c.env.SESSIONS, user?.id ?? null, normalizedEmail);
 
   setCookie(c, "session", sessionToken, {
     httpOnly: true,

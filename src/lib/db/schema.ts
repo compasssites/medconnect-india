@@ -7,7 +7,8 @@ export const users = sqliteTable(
   "users",
   {
     id: text("id").primaryKey(), // ULID
-    phone: text("phone").notNull().unique(), // +91XXXXXXXXXX
+    email: text("email").notNull().unique(),
+    phone: text("phone").unique(), // optional contact number
     name: text("name").notNull(),
     role: text("role", { enum: ["doctor", "patient"] }).notNull(),
     avatarUrl: text("avatar_url"),
@@ -18,7 +19,7 @@ export const users = sqliteTable(
       .notNull()
       .default(sql`(unixepoch())`),
   },
-  (t) => [index("idx_users_phone").on(t.phone)]
+  (t) => [index("idx_users_email").on(t.email), index("idx_users_phone").on(t.phone)]
 );
 
 // ─── Doctor Profiles ────────────────────────────────────────────────────────
@@ -111,6 +112,37 @@ export const patientProfiles = sqliteTable("patient_profiles", {
     .default(sql`(unixepoch())`),
 });
 
+export const doctorApprovalRequests = sqliteTable(
+  "doctor_approval_requests",
+  {
+    id: text("id").primaryKey(),
+    doctorUserId: text("doctor_user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id),
+    recommendedByUserId: text("recommended_by_user_id").references(() => users.id),
+    reviewedByUserId: text("reviewed_by_user_id").references(() => users.id),
+    status: text("status", { enum: ["pending", "approved", "rejected"] })
+      .notNull()
+      .default("pending"),
+    reviewNotes: text("review_notes"),
+    requestedAt: integer("requested_at", { mode: "number" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    reviewedAt: integer("reviewed_at", { mode: "number" }),
+    createdAt: integer("created_at", { mode: "number" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at", { mode: "number" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [
+    index("idx_doctor_approval_requests_recommended_by").on(t.recommendedByUserId),
+    index("idx_doctor_approval_requests_status").on(t.status),
+  ]
+);
+
 // ─── Consultations ──────────────────────────────────────────────────────────
 
 export const consultations = sqliteTable(
@@ -185,3 +217,5 @@ export type PatientProfile = typeof patientProfiles.$inferSelect;
 export type NewPatientProfile = typeof patientProfiles.$inferInsert;
 export type Consultation = typeof consultations.$inferSelect;
 export type NewConsultation = typeof consultations.$inferInsert;
+export type DoctorApprovalRequest = typeof doctorApprovalRequests.$inferSelect;
+export type NewDoctorApprovalRequest = typeof doctorApprovalRequests.$inferInsert;

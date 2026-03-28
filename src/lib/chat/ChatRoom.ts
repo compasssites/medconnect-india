@@ -41,7 +41,7 @@ export class ChatRoom extends DurableObject<Env> {
     const sessionJson = await this.env.SESSIONS.get(`session:${token}`);
     if (!sessionJson) return new Response("Invalid or expired session", { status: 401 });
 
-    let session: { userId: string; phone: string; role?: string; expiresAt: number };
+    let session: { userId: string; email: string; role?: string; expiresAt: number };
     try {
       session = JSON.parse(sessionJson);
     } catch {

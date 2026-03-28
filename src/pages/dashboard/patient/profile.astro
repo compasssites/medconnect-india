@@ -84,7 +84,10 @@ const profile = await db.select().from(patientProfiles).where(eq(patientProfiles
       </div>
 
       <div class="bg-gray-50 rounded-2xl border border-[var(--color-border)] p-4">
-        <p class="text-xs text-[var(--color-muted)]">Phone: <strong>{currentUser.phone}</strong> · This cannot be changed.</p>
+        <p class="text-xs text-[var(--color-muted)]">
+          Email: <strong>{currentUser.email}</strong>
+          {currentUser.phone ? ` · Phone: ${currentUser.phone}` : ""}
+        </p>
       </div>
 
       <p id="save-error" class="text-sm text-[var(--color-danger)] hidden"></p>
