@@ -1,0 +1,77 @@
+---
+import DashboardLayout from "../../../../../layouts/DashboardLayout.astro";
+import { getSessionUser } from "../../../../../lib/auth/session";
+import { getConsultationById } from "../../../../../lib/db/queries";
+import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
+import { users } from "../../../../../lib/db/schema";
+
+const env = (Astro.locals as App.Locals).runtime?.env;
+const sessionCookie = Astro.cookies.get("session")?.value;
+if (!sessionCookie || !env) return Astro.redirect("/auth/login");
+
+const currentUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
+if (!currentUser || currentUser.role !== "doctor") return Astro.redirect("/auth/login");
+
+const { id } = Astro.params;
+if (!id) return Astro.redirect("/dashboard/doctor");
+
+const consultation = await getConsultationById(env.DB, id);
+if (!consultation || consultation.doctorId !== currentUser.id) return Astro.redirect("/dashboard/doctor");
+if (consultation.status !== "requested") return Astro.redirect("/dashboard/doctor");
+
+const db = drizzle(env.DB);
+const patient = await db.select({ name: users.name }).from(users).where(eq(users.id, consultation.patientId)).get();
+---
+
+<DashboardLayout title="Reject Consultation — MedConnect" role="doctor">
+  <div class="max-w-lg mx-auto">
+    <a href="/dashboard/doctor" class="flex items-center gap-1.5 text-sm text-[var(--color-muted)] hover:text-[var(--color-text)] mb-6">← Back to dashboard</a>
+    <h1 class="text-xl font-bold mb-1">Reject Consultation</h1>
+    <p class="text-sm text-[var(--color-muted)] mb-6">Patient: <strong>{patient?.name}</strong> · {consultation.chiefComplaint}</p>
+
+    <form id="reject-form" class="bg-white rounded-2xl border border-[var(--color-border)] p-6 space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-1.5">Reason <span class="text-[var(--color-muted)] font-normal">(optional)</span></label>
+        <textarea id="notes" rows="3" placeholder="Let the patient know why (e.g. not in my specialization, fully booked)…"
+          class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] resize-y"></textarea>
+      </div>
+      <p id="error" class="text-sm text-[var(--color-danger)] hidden"></p>
+      <div class="flex gap-3">
+        <button type="submit" id="submit-btn"
+          class="flex-1 py-2.5 rounded-xl bg-[var(--color-danger)] text-white font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-60">
+          Reject
+        </button>
+        <a href="/dashboard/doctor" class="flex-1 py-2.5 rounded-xl border border-[var(--color-border)] text-sm font-medium text-center text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">
+          Cancel
+        </a>
+      </div>
+    </form>
+  </div>
+</DashboardLayout>
+
+<script define:vars={{ consultationId: id }}>
+  document.getElementById("reject-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const error = document.getElementById("error");
+    const btn = document.getElementById("submit-btn");
+    error.classList.add("hidden");
+    btn.disabled = true;
+    btn.textContent = "Rejecting…";
+    try {
+      const res = await fetch(`/api/consultation/${consultationId}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doctorNotes: document.getElementById("notes").value.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      window.location.href = "/dashboard/doctor";
+    } catch (err) {
+      error.textContent = err.message;
+      error.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Reject";
+    }
+  });
+</script>

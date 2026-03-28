@@ -1,0 +1,181 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getDoctorBySlug } from "../../lib/db/queries";
+import { getSessionUser } from "../../lib/auth/session";
+
+const env = (Astro.locals as App.Locals).runtime?.env;
+const { slug } = Astro.params;
+
+if (!slug || !env) return Astro.redirect("/doctors");
+
+const result = await getDoctorBySlug(env.DB, slug);
+if (!result) return Astro.redirect("/doctors");
+
+const { profile, user } = result;
+
+// Check if viewer is a logged-in patient
+const sessionCookie = Astro.cookies.get("session")?.value;
+const currentUser = sessionCookie ? await getSessionUser(env.SESSIONS, env.DB, sessionCookie) : null;
+const isPatient = currentUser?.role === "patient";
+const isOwner = currentUser?.id === user.id;
+
+const languages: string[] = profile.languages ? JSON.parse(profile.languages) : [];
+
+const title = `${user.name} — ${profile.specialization} in ${profile.city ?? "India"} | MedConnect`;
+const description = profile.bio ?? `Consult ${user.name}, ${profile.specialization} with ${profile.qualification}. Direct consultation via MedConnect.`;
+---
+
+<BaseLayout title={title} description={description}>
+  <main id="main-content">
+    <!-- Breadcrumb -->
+    <div class="bg-[var(--color-bg)] border-b border-[var(--color-border)]">
+      <div class="container py-3 text-xs text-[var(--color-muted)]">
+        <a href="/" class="hover:text-[var(--color-text)]">Home</a> /
+        <a href="/doctors" class="hover:text-[var(--color-text)]">Doctors</a> /
+        <span class="text-[var(--color-text)]">{user.name}</span>
+      </div>
+    </div>
+
+    <div class="container py-8">
+      <div class="max-w-4xl mx-auto">
+        <div class="grid lg:grid-cols-3 gap-6">
+          <!-- Main profile -->
+          <div class="lg:col-span-2 space-y-5">
+            <!-- Header card -->
+            <div class="bg-white rounded-2xl border border-[var(--color-border)] p-6">
+              <div class="flex items-start gap-4">
+                <div class="w-20 h-20 rounded-2xl bg-blue-50 flex items-center justify-center shrink-0 text-[var(--color-primary)] font-bold text-3xl">
+                  {user.name.charAt(0)}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-1">
+                    <h1 class="text-xl font-bold">{user.name}</h1>
+                    {profile.isVerified && (
+                      <span title="Verified doctor" class="inline-flex items-center gap-1 text-xs bg-blue-50 text-[var(--color-primary)] px-2 py-0.5 rounded-full font-medium">
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                        Verified
+                      </span>
+                    )}
+                  </div>
+                  <p class="text-[var(--color-muted)] text-sm mb-1">{profile.specialization} · {profile.qualification}</p>
+                  {profile.experienceYears && <p class="text-sm text-[var(--color-muted)]">{profile.experienceYears} years experience</p>}
+                  {profile.city && <p class="text-sm text-[var(--color-muted)] mt-1">📍 {profile.city}{profile.state ? `, ${profile.state}` : ""}</p>}
+                </div>
+              </div>
+
+              {profile.bio && (
+                <p class="mt-4 text-sm text-[var(--color-text)] leading-relaxed border-t border-[var(--color-border)] pt-4">
+                  {profile.bio}
+                </p>
+              )}
+            </div>
+
+            <!-- Details -->
+            <div class="bg-white rounded-2xl border border-[var(--color-border)] p-6 space-y-4">
+              <h2 class="font-semibold">Details</h2>
+              <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                <div>
+                  <dt class="text-[var(--color-muted)] text-xs uppercase tracking-wide mb-0.5">Registration</dt>
+                  <dd class="font-medium">{profile.registrationNumber}</dd>
+                </div>
+                <div>
+                  <dt class="text-[var(--color-muted)] text-xs uppercase tracking-wide mb-0.5">Council</dt>
+                  <dd class="font-medium">{profile.registrationCouncil}</dd>
+                </div>
+                {profile.clinicName && (
+                  <div class="col-span-2">
+                    <dt class="text-[var(--color-muted)] text-xs uppercase tracking-wide mb-0.5">Clinic</dt>
+                    <dd class="font-medium">{profile.clinicName}</dd>
+                  </div>
+                )}
+                {profile.clinicAddress && (
+                  <div class="col-span-2">
+                    <dt class="text-[var(--color-muted)] text-xs uppercase tracking-wide mb-0.5">Address</dt>
+                    <dd>{profile.clinicAddress}</dd>
+                  </div>
+                )}
+                {languages.length > 0 && (
+                  <div class="col-span-2">
+                    <dt class="text-[var(--color-muted)] text-xs uppercase tracking-wide mb-1">Languages</dt>
+                    <dd class="flex flex-wrap gap-1.5">
+                      {languages.map((l) => (
+                        <span class="bg-[var(--color-bg)] border border-[var(--color-border)] px-2.5 py-0.5 rounded-full text-xs">{l}</span>
+                      ))}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+
+            <!-- Consultation terms -->
+            {profile.terms && (
+              <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                <h2 class="font-semibold text-sm mb-2 flex items-center gap-2">
+                  <svg class="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  Consultation terms
+                </h2>
+                <p class="text-sm text-amber-900 leading-relaxed">{profile.terms}</p>
+              </div>
+            )}
+          </div>
+
+          <!-- Right sidebar: consultation card -->
+          <div class="space-y-4">
+            <div class="bg-white rounded-2xl border border-[var(--color-border)] p-5 sticky top-20">
+              <!-- Availability -->
+              <div class="flex items-center gap-2 mb-4">
+                <span class={`w-2 h-2 rounded-full ${profile.isAvailable ? "bg-[var(--color-secondary)]" : "bg-gray-300"}`}></span>
+                <span class={`text-sm font-medium ${profile.isAvailable ? "text-[var(--color-secondary)]" : "text-[var(--color-muted)]"}`}>
+                  {profile.isAvailable ? "Available for consultation" : "Currently unavailable"}
+                </span>
+              </div>
+
+              <!-- Fee & mode -->
+              <div class="space-y-2 mb-5 text-sm">
+                {profile.consultationFee != null && (
+                  <div class="flex justify-between">
+                    <span class="text-[var(--color-muted)]">Consultation fee</span>
+                    <span class="font-semibold">{profile.consultationFee === 0 ? "Free" : `₹${profile.consultationFee}`}</span>
+                  </div>
+                )}
+                <div class="flex justify-between">
+                  <span class="text-[var(--color-muted)]">Mode</span>
+                  <span class="capitalize font-medium">{profile.consultationMode}</span>
+                </div>
+                {profile.paymentMode && (
+                  <div class="flex justify-between">
+                    <span class="text-[var(--color-muted)]">Payment</span>
+                    <span class="capitalize font-medium">{profile.paymentMode}</span>
+                  </div>
+                )}
+                {profile.upiId && (
+                  <div class="flex justify-between">
+                    <span class="text-[var(--color-muted)]">UPI</span>
+                    <span class="font-mono text-xs">{profile.upiId}</span>
+                  </div>
+                )}
+              </div>
+
+              {isOwner ? (
+                <a href="/dashboard/doctor/profile" class="block w-full text-center py-2.5 rounded-lg border border-[var(--color-primary)] text-[var(--color-primary)] font-semibold text-sm hover:bg-blue-50 transition-colors">
+                  Edit profile
+                </a>
+              ) : isPatient ? (
+                <a
+                  href={`/consultation/request/${user.id}`}
+                  class={`block w-full text-center py-2.5 rounded-lg font-semibold text-sm transition-colors ${profile.isAvailable ? "bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]" : "bg-gray-100 text-[var(--color-muted)] cursor-not-allowed pointer-events-none"}`}
+                >
+                  {profile.isAvailable ? "Request Consultation" : "Not available"}
+                </a>
+              ) : !currentUser ? (
+                <a href="/auth/login" class="block w-full text-center py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors">
+                  Sign in to consult
+                </a>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</BaseLayout>

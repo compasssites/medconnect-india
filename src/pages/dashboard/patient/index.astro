@@ -1,0 +1,145 @@
+---
+import DashboardLayout from "../../../layouts/DashboardLayout.astro";
+import { getSessionUser } from "../../../lib/auth/session";
+import { getConsultationsForPatient } from "../../../lib/db/queries";
+import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
+import { users, doctorProfiles } from "../../../lib/db/schema";
+
+const env = (Astro.locals as App.Locals).runtime?.env;
+const sessionCookie = Astro.cookies.get("session")?.value;
+if (!sessionCookie || !env) return Astro.redirect("/auth/login");
+
+const currentUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
+if (!currentUser || currentUser.role !== "patient") return Astro.redirect("/auth/login");
+
+const tab = Astro.url.searchParams.get("tab") ?? "active";
+const allConsultations = await getConsultationsForPatient(env.DB, currentUser.id);
+
+const pending = allConsultations.filter((c) => c.status === "requested");
+const active = allConsultations.filter((c) => ["accepted", "in_progress"].includes(c.status));
+const history = allConsultations.filter((c) => ["completed", "rejected", "cancelled"].includes(c.status));
+
+// Fetch doctor info
+const db = drizzle(env.DB);
+const doctorIds = [...new Set(allConsultations.map((c) => c.doctorId))];
+const doctorMap: Record<string, { name: string; specialization: string; slug: string }> = {};
+for (const id of doctorIds) {
+  const u = await db.select({ name: users.name }).from(users).where(eq(users.id, id)).get();
+  const p = await db.select({ specialization: doctorProfiles.specialization, slug: doctorProfiles.slug }).from(doctorProfiles).where(eq(doctorProfiles.userId, id)).get();
+  if (u && p) doctorMap[id] = { name: u.name, specialization: p.specialization, slug: p.slug };
+}
+
+const statusColors: Record<string, string> = {
+  requested: "bg-amber-50 text-amber-700",
+  accepted: "bg-blue-50 text-[var(--color-primary)]",
+  in_progress: "bg-green-50 text-[var(--color-secondary)]",
+  completed: "bg-gray-100 text-gray-600",
+  rejected: "bg-red-50 text-[var(--color-danger)]",
+  cancelled: "bg-gray-100 text-gray-500",
+};
+---
+
+<DashboardLayout title="My Consultations — MedConnect" role="patient">
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-xl font-bold">My Consultations</h1>
+      <p class="text-sm text-[var(--color-muted)] mt-0.5">Welcome, {currentUser.name}</p>
+    </div>
+    <a href="/doctors" class="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-semibold hover:bg-[var(--color-primary-dark)] transition-colors">
+      Find a Doctor
+    </a>
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex gap-1 bg-[var(--color-bg)] rounded-xl p-1 border border-[var(--color-border)] mb-5 w-fit">
+    {[
+      { key: "active", label: `Active (${active.length})` },
+      { key: "pending", label: `Pending (${pending.length})` },
+      { key: "history", label: "History" },
+    ].map(({ key, label }) => (
+      <a href={`?tab=${key}`}
+        class={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === key ? "bg-white shadow-sm text-[var(--color-text)]" : "text-[var(--color-muted)] hover:text-[var(--color-text)]"}`}>
+        {label}
+      </a>
+    ))}
+  </div>
+
+  {tab === "active" && (
+    <div class="space-y-3">
+      {active.length === 0 ? (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-10 text-center">
+          <p class="text-[var(--color-muted)] text-sm mb-3">No active consultations</p>
+          <a href="/doctors" class="text-sm text-[var(--color-primary)] hover:underline">Find a doctor →</a>
+        </div>
+      ) : active.map((c) => (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-5">
+          <div class="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <p class="font-semibold text-sm">{doctorMap[c.doctorId]?.name ?? "Doctor"}</p>
+              <p class="text-xs text-[var(--color-muted)]">{doctorMap[c.doctorId]?.specialization}</p>
+              <p class="text-sm mt-1">{c.chiefComplaint}</p>
+            </div>
+            <span class={`text-xs font-medium px-2.5 py-0.5 rounded-full shrink-0 ${statusColors[c.status]}`}>
+              {c.status.replace("_", " ")}
+            </span>
+          </div>
+          {c.consultationFee != null && (
+            <p class="text-xs text-[var(--color-muted)] mb-3">
+              Fee: <strong>₹{c.consultationFee}</strong> · Payment: <strong class="capitalize">{c.paymentMode}</strong>
+              {c.consultationMode && ` · ${c.consultationMode}`}
+            </p>
+          )}
+          {c.status === "in_progress" && (
+            <a href={`/consultation/${c.id}`}
+              class="inline-flex px-4 py-1.5 rounded-lg bg-[var(--color-secondary)] text-white text-sm font-medium hover:bg-[var(--color-secondary-dark)] transition-colors">
+              Open Chat
+            </a>
+          )}
+          {c.status === "accepted" && (
+            <p class="text-xs text-[var(--color-muted)] italic">Waiting for doctor to start the session</p>
+          )}
+        </div>
+      ))}
+    </div>
+  )}
+
+  {tab === "pending" && (
+    <div class="space-y-3">
+      {pending.length === 0 ? (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-10 text-center text-[var(--color-muted)] text-sm">
+          No pending requests
+        </div>
+      ) : pending.map((c) => (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-5 flex items-center justify-between gap-4">
+          <div>
+            <p class="font-semibold text-sm">{doctorMap[c.doctorId]?.name ?? "Doctor"}</p>
+            <p class="text-xs text-[var(--color-muted)]">{c.chiefComplaint}</p>
+            <p class="text-xs text-[var(--color-muted)] mt-0.5">
+              Sent {new Date(c.requestedAt * 1000).toLocaleDateString("en-IN")}
+            </p>
+          </div>
+          <span class="text-xs font-medium px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700">Awaiting response</span>
+        </div>
+      ))}
+    </div>
+  )}
+
+  {tab === "history" && (
+    <div class="space-y-2">
+      {history.length === 0 ? (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-10 text-center text-[var(--color-muted)] text-sm">
+          No past consultations
+        </div>
+      ) : history.map((c) => (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-4 flex items-center justify-between gap-4">
+          <div>
+            <p class="text-sm font-medium">{doctorMap[c.doctorId]?.name ?? "Doctor"}</p>
+            <p class="text-xs text-[var(--color-muted)]">{c.chiefComplaint}</p>
+          </div>
+          <span class={`text-xs font-medium px-2.5 py-0.5 rounded-full ${statusColors[c.status]}`}>{c.status}</span>
+        </div>
+      ))}
+    </div>
+  )}
+</DashboardLayout>

@@ -1,0 +1,110 @@
+---
+import DashboardLayout from "../../../../../layouts/DashboardLayout.astro";
+import { getSessionUser } from "../../../../../lib/auth/session";
+import { getConsultationById } from "../../../../../lib/db/queries";
+import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
+import { users } from "../../../../../lib/db/schema";
+
+const env = (Astro.locals as App.Locals).runtime?.env;
+const sessionCookie = Astro.cookies.get("session")?.value;
+if (!sessionCookie || !env) return Astro.redirect("/auth/login");
+
+const currentUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
+if (!currentUser || currentUser.role !== "doctor") return Astro.redirect("/auth/login");
+
+const { id } = Astro.params;
+if (!id) return Astro.redirect("/dashboard/doctor");
+
+const consultation = await getConsultationById(env.DB, id);
+if (!consultation || consultation.doctorId !== currentUser.id) return Astro.redirect("/dashboard/doctor");
+if (consultation.status !== "requested") return Astro.redirect("/dashboard/doctor");
+
+const db = drizzle(env.DB);
+const patient = await db.select({ name: users.name }).from(users).where(eq(users.id, consultation.patientId)).get();
+---
+
+<DashboardLayout title="Accept Consultation — MedConnect" role="doctor">
+  <div class="max-w-lg mx-auto">
+    <a href="/dashboard/doctor" class="flex items-center gap-1.5 text-sm text-[var(--color-muted)] hover:text-[var(--color-text)] mb-6">← Back to dashboard</a>
+
+    <h1 class="text-xl font-bold mb-1">Accept Consultation</h1>
+    <p class="text-sm text-[var(--color-muted)] mb-2">Patient: <strong class="text-[var(--color-text)]">{patient?.name ?? "Unknown"}</strong></p>
+    <div class="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-xl p-4 mb-6 text-sm">
+      <p class="font-medium mb-1">Chief complaint</p>
+      <p class="text-[var(--color-text)]">{consultation.chiefComplaint}</p>
+      {consultation.symptoms && <p class="text-[var(--color-muted)] mt-2 text-xs">{consultation.symptoms}</p>}
+    </div>
+
+    <form id="accept-form" class="bg-white rounded-2xl border border-[var(--color-border)] p-6 space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1.5">Consultation mode <span class="text-[var(--color-danger)]">*</span></label>
+          <select id="mode" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]">
+            <option value="online">Online</option>
+            <option value="offline">In-person</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1.5">Payment <span class="text-[var(--color-danger)]">*</span></label>
+          <select id="payment" class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]">
+            <option value="prepaid">Prepaid</option>
+            <option value="postpaid">Postpaid</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1.5">Consultation fee (₹)</label>
+        <input id="fee" type="number" min="0" placeholder="0 for free" value="0"
+          class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1.5">Notes to patient <span class="text-[var(--color-muted)] font-normal">(optional)</span></label>
+        <textarea id="notes" rows="3" placeholder="Any instructions before the consultation…"
+          class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] resize-y"></textarea>
+      </div>
+      <p id="error" class="text-sm text-[var(--color-danger)] hidden"></p>
+      <div class="flex gap-3 pt-1">
+        <button type="submit" id="submit-btn"
+          class="flex-1 py-2.5 rounded-xl bg-[var(--color-primary)] text-white font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-60">
+          Accept Consultation
+        </button>
+        <a href="/dashboard/doctor" class="flex-1 py-2.5 rounded-xl border border-[var(--color-border)] text-sm font-medium text-center text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">
+          Cancel
+        </a>
+      </div>
+    </form>
+  </div>
+</DashboardLayout>
+
+<script define:vars={{ consultationId: id }}>
+  document.getElementById("accept-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const error = document.getElementById("error");
+    const btn = document.getElementById("submit-btn");
+    error.classList.add("hidden");
+    btn.disabled = true;
+    btn.textContent = "Accepting…";
+
+    try {
+      const res = await fetch(`/api/consultation/${consultationId}/accept`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          consultationMode: document.getElementById("mode").value,
+          paymentMode: document.getElementById("payment").value,
+          consultationFee: parseInt(document.getElementById("fee").value) || 0,
+          doctorNotes: document.getElementById("notes").value.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      window.location.href = "/dashboard/doctor";
+    } catch (err) {
+      error.textContent = err.message;
+      error.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Accept Consultation";
+    }
+  });
+</script>

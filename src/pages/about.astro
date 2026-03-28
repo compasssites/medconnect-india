@@ -1,0 +1,51 @@
+---
+export const prerender = true;
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="About MedConnect — Free Direct Doctor Consultations in India">
+  <main id="main-content" class="container py-12 max-w-2xl mx-auto prose prose-sm">
+    <a href="/" class="text-sm text-[var(--color-muted)] hover:text-[var(--color-text)] no-underline flex items-center gap-1 mb-8">← Home</a>
+    <h1 class="text-3xl font-bold mb-2">About MedConnect</h1>
+    <p class="text-[var(--color-muted)] text-lg mb-8">By doctors, for patients.</p>
+
+    <div class="space-y-6 text-sm leading-relaxed text-[var(--color-text)]">
+      <p>
+        MedConnect is a free, direct consultation platform built for India. No referral fees, no platform commissions, no hidden charges. When a patient pays a consultation fee, it goes entirely to the doctor — directly via UPI.
+      </p>
+
+      <h2 class="text-lg font-bold mt-8">Why we built this</h2>
+      <p>
+        Existing platforms charge doctors significant commissions and patients listing fees. This inflates the cost of care and creates friction between doctors and their patients. MedConnect removes the middleman entirely.
+      </p>
+
+      <h2 class="text-lg font-bold mt-8">How it works</h2>
+      <ul class="list-disc pl-5 space-y-2">
+        <li>Doctors register, set their own fees and terms, and control their availability.</li>
+        <li>Patients search, review profiles, and send consultation requests.</li>
+        <li>Doctors accept or reject requests on their own terms.</li>
+        <li>Once accepted, a private chat opens for the consultation.</li>
+        <li>Payment is handled directly between patient and doctor via UPI.</li>
+      </ul>
+
+      <h2 class="text-lg font-bold mt-8">How we sustain ourselves</h2>
+      <p>
+        MedConnect is funded by small, relevant, non-intrusive ads. No data is sold. No doctor or patient ever pays the platform.
+      </p>
+
+      <h2 class="text-lg font-bold mt-8">For doctors</h2>
+      <p>
+        Register your practice, set your consultation terms, and start receiving patient requests. Your registration number and council are publicly displayed — patients can verify your credentials directly with the medical council.
+      </p>
+
+      <div class="mt-10 flex gap-3">
+        <a href="/auth/register" class="px-5 py-2.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-semibold hover:bg-[var(--color-primary-dark)] transition-colors no-underline">
+          Register as Doctor
+        </a>
+        <a href="/doctors" class="px-5 py-2.5 rounded-lg border border-[var(--color-border)] text-sm font-semibold text-[var(--color-text)] hover:bg-[var(--color-bg)] transition-colors no-underline">
+          Find a Doctor
+        </a>
+      </div>
+    </div>
+  </main>
+</BaseLayout>

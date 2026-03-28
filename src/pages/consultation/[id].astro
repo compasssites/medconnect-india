@@ -1,0 +1,49 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { ChatWindow } from "../../components/chat/ChatWindow";
+import { getSessionUser } from "../../lib/auth/session";
+import { getConsultationById } from "../../lib/db/queries";
+import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
+import { users } from "../../lib/db/schema";
+
+const env = (Astro.locals as App.Locals).runtime?.env;
+const sessionCookie = Astro.cookies.get("session")?.value;
+if (!sessionCookie || !env) return Astro.redirect("/auth/login");
+
+const currentUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
+if (!currentUser) return Astro.redirect("/auth/login");
+
+const { id } = Astro.params;
+if (!id) return Astro.redirect("/dashboard");
+
+const consultation = await getConsultationById(env.DB, id);
+if (!consultation) return Astro.redirect("/dashboard");
+if (consultation.doctorId !== currentUser.id && consultation.patientId !== currentUser.id) {
+  return Astro.redirect("/dashboard");
+}
+if (consultation.status !== "in_progress") {
+  return Astro.redirect(`/dashboard/${currentUser.role}`);
+}
+
+const db = drizzle(env.DB);
+const otherId = currentUser.id === consultation.doctorId ? consultation.patientId : consultation.doctorId;
+const otherUserRow = await db.select({ id: users.id, name: users.name, role: users.role }).from(users).where(eq(users.id, otherId)).get();
+
+if (!otherUserRow) return Astro.redirect("/dashboard");
+
+const currentChatUser = { id: currentUser.id, name: currentUser.name, role: currentUser.role as "doctor" | "patient" };
+const otherChatUser = { id: otherUserRow.id, name: otherUserRow.name, role: otherUserRow.role as "doctor" | "patient" };
+---
+
+<BaseLayout title={`Chat with ${otherUserRow.name} — MedConnect`}>
+  <!-- Full-screen chat — no dashboard chrome -->
+  <ChatWindow
+    client:only="preact"
+    consultationId={id}
+    currentUser={currentChatUser}
+    otherUser={otherChatUser}
+    sessionToken={sessionCookie}
+    isDoctor={currentUser.role === "doctor"}
+  />
+</BaseLayout>

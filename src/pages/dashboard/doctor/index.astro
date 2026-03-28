@@ -1,0 +1,195 @@
+---
+import DashboardLayout from "../../../layouts/DashboardLayout.astro";
+import { getSessionUser } from "../../../lib/auth/session";
+import { getConsultationsForDoctor, getDoctorProfileByUserId } from "../../../lib/db/queries";
+import { drizzle } from "drizzle-orm/d1";
+import { eq } from "drizzle-orm";
+import { users, doctorProfiles } from "../../../lib/db/schema";
+
+const env = (Astro.locals as App.Locals).runtime?.env;
+const sessionCookie = Astro.cookies.get("session")?.value;
+if (!sessionCookie || !env) return Astro.redirect("/auth/login");
+
+const currentUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
+if (!currentUser || currentUser.role !== "doctor") return Astro.redirect("/auth/login");
+
+const doctorProfile = await getDoctorProfileByUserId(env.DB, currentUser.id);
+
+const tab = Astro.url.searchParams.get("tab") ?? "requests";
+const allConsultations = await getConsultationsForDoctor(env.DB, currentUser.id);
+
+const requests = allConsultations.filter((c) => c.status === "requested");
+const active = allConsultations.filter((c) => ["accepted", "in_progress"].includes(c.status));
+const history = allConsultations.filter((c) => ["completed", "rejected", "cancelled"].includes(c.status));
+
+// Fetch patient names for consultations
+const db = drizzle(env.DB);
+const patientIds = [...new Set(allConsultations.map((c) => c.patientId))];
+const patientMap: Record<string, string> = {};
+for (const id of patientIds) {
+  const u = await db.select({ name: users.name }).from(users).where(eq(users.id, id)).get();
+  if (u) patientMap[id] = u.name;
+}
+
+const statusColors: Record<string, string> = {
+  requested: "bg-amber-50 text-amber-700",
+  accepted: "bg-blue-50 text-[var(--color-primary)]",
+  in_progress: "bg-green-50 text-[var(--color-secondary)]",
+  completed: "bg-gray-100 text-gray-600",
+  rejected: "bg-red-50 text-[var(--color-danger)]",
+  cancelled: "bg-gray-100 text-gray-500",
+};
+---
+
+<DashboardLayout title="Doctor Dashboard — MedConnect" role="doctor">
+  <div class="mb-6">
+    <div class="flex items-center justify-between mb-1">
+      <h1 class="text-xl font-bold">Welcome, {currentUser.name}</h1>
+      {doctorProfile && (
+        <label class="flex items-center gap-2 cursor-pointer select-none" title="Toggle availability">
+          <span class="text-sm text-[var(--color-muted)]">{doctorProfile.isAvailable ? "Available" : "Unavailable"}</span>
+          <span id="avail-toggle" data-available={doctorProfile.isAvailable ? "1" : "0"}
+            class={`relative inline-block w-11 h-6 rounded-full transition-colors ${doctorProfile.isAvailable ? "bg-[var(--color-secondary)]" : "bg-gray-300"}`}>
+            <span class={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${doctorProfile.isAvailable ? "translate-x-5" : "translate-x-0.5"}`}></span>
+          </span>
+        </label>
+      )}
+    </div>
+    {doctorProfile && (
+      <p class="text-sm text-[var(--color-muted)]">
+        {doctorProfile.specialization} · <a href={`/doctors/${doctorProfile.slug}`} class="text-[var(--color-primary)] hover:underline">View profile</a>
+      </p>
+    )}
+  </div>
+
+  <!-- Stats -->
+  <div class="grid grid-cols-3 gap-4 mb-6">
+    {[
+      { label: "Pending requests", value: requests.length, color: "text-amber-600" },
+      { label: "Active consultations", value: active.length, color: "text-[var(--color-primary)]" },
+      { label: "Completed", value: history.filter(c => c.status === "completed").length, color: "text-[var(--color-secondary)]" },
+    ].map(({ label, value, color }) => (
+      <div class="bg-white rounded-xl border border-[var(--color-border)] p-4 text-center">
+        <div class={`text-2xl font-bold ${color}`}>{value}</div>
+        <div class="text-xs text-[var(--color-muted)] mt-1">{label}</div>
+      </div>
+    ))}
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex gap-1 bg-[var(--color-bg)] rounded-xl p-1 border border-[var(--color-border)] mb-5 w-fit">
+    {[
+      { key: "requests", label: `Requests (${requests.length})` },
+      { key: "active", label: `Active (${active.length})` },
+      { key: "history", label: "History" },
+    ].map(({ key, label }) => (
+      <a href={`?tab=${key}`}
+        class={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === key ? "bg-white shadow-sm text-[var(--color-text)]" : "text-[var(--color-muted)] hover:text-[var(--color-text)]"}`}>
+        {label}
+      </a>
+    ))}
+  </div>
+
+  <!-- Tab content -->
+  {tab === "requests" && (
+    <div class="space-y-3">
+      {requests.length === 0 ? (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-10 text-center text-[var(--color-muted)] text-sm">
+          No pending consultation requests
+        </div>
+      ) : requests.map((c) => (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-5">
+          <div class="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <p class="font-semibold text-sm">{patientMap[c.patientId] ?? "Patient"}</p>
+              <p class="text-sm text-[var(--color-text)] mt-0.5">{c.chiefComplaint}</p>
+              {c.symptoms && <p class="text-xs text-[var(--color-muted)] mt-1 line-clamp-2">{c.symptoms}</p>}
+            </div>
+            <span class="text-xs text-[var(--color-muted)] shrink-0">{new Date(c.requestedAt * 1000).toLocaleDateString("en-IN")}</span>
+          </div>
+          {(c.existingConditions || c.currentMedications || c.durationOfSymptoms) && (
+            <div class="flex flex-wrap gap-3 text-xs text-[var(--color-muted)] mb-3 pt-3 border-t border-[var(--color-border)]">
+              {c.durationOfSymptoms && <span>Duration: {c.durationOfSymptoms}</span>}
+              {c.existingConditions && <span>Conditions: {c.existingConditions}</span>}
+              {c.currentMedications && <span>Medications: {c.currentMedications}</span>}
+            </div>
+          )}
+          <div class="flex gap-2 pt-1">
+            <a href={`/dashboard/doctor/consultation/${c.id}/accept`}
+              class="px-4 py-1.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary-dark)] transition-colors">
+              Accept
+            </a>
+            <a href={`/dashboard/doctor/consultation/${c.id}/reject`}
+              class="px-4 py-1.5 rounded-lg border border-[var(--color-border)] text-sm font-medium text-[var(--color-muted)] hover:border-[var(--color-danger)] hover:text-[var(--color-danger)] transition-colors">
+              Reject
+            </a>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+
+  {tab === "active" && (
+    <div class="space-y-3">
+      {active.length === 0 ? (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-10 text-center text-[var(--color-muted)] text-sm">
+          No active consultations
+        </div>
+      ) : active.map((c) => (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-5 flex items-center justify-between gap-4">
+          <div>
+            <p class="font-semibold text-sm">{patientMap[c.patientId] ?? "Patient"}</p>
+            <p class="text-xs text-[var(--color-muted)] mt-0.5">{c.chiefComplaint}</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class={`text-xs font-medium px-2.5 py-0.5 rounded-full ${statusColors[c.status]}`}>{c.status.replace("_", " ")}</span>
+            {c.status === "in_progress" ? (
+              <a href={`/consultation/${c.id}`} class="px-4 py-1.5 rounded-lg bg-[var(--color-secondary)] text-white text-sm font-medium hover:bg-[var(--color-secondary-dark)] transition-colors">
+                Open chat
+              </a>
+            ) : (
+              <form method="POST" action={`/api/consultation/${c.id}/start`}>
+                <button type="submit" class="px-4 py-1.5 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary-dark)] transition-colors">
+                  Start chat
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+
+  {tab === "history" && (
+    <div class="space-y-2">
+      {history.length === 0 ? (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-10 text-center text-[var(--color-muted)] text-sm">
+          No past consultations
+        </div>
+      ) : history.map((c) => (
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-4 flex items-center justify-between gap-4">
+          <div>
+            <p class="text-sm font-medium">{patientMap[c.patientId] ?? "Patient"}</p>
+            <p class="text-xs text-[var(--color-muted)]">{c.chiefComplaint}</p>
+          </div>
+          <span class={`text-xs font-medium px-2.5 py-0.5 rounded-full ${statusColors[c.status]}`}>{c.status}</span>
+        </div>
+      ))}
+    </div>
+  )}
+</DashboardLayout>
+
+<script>
+  const toggle = document.getElementById("avail-toggle");
+  if (toggle) {
+    toggle.addEventListener("click", async () => {
+      const isAvailable = toggle.dataset.available === "1";
+      const res = await fetch("/api/doctors/availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isAvailable: !isAvailable }),
+      });
+      if (res.ok) window.location.reload();
+    });
+  }
+</script>

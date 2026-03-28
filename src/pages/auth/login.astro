@@ -1,0 +1,217 @@
+---
+import AuthLayout from "../../layouts/AuthLayout.astro";
+
+// Redirect if already logged in
+const session = Astro.cookies.get("session");
+if (session?.value) {
+  const res = await fetch(`${Astro.url.origin}/api/auth/me`, {
+    headers: { cookie: `session=${session.value}` },
+  });
+  const data = await res.json<{ user: { role: string } | null }>();
+  if (data.user) {
+    return Astro.redirect(`/dashboard/${data.user.role}`);
+  }
+}
+---
+
+<AuthLayout title="Sign in — MedConnect">
+  <div class="bg-white rounded-2xl border border-[var(--color-border)] shadow-sm p-8">
+    <h1 class="text-2xl font-bold mb-1">Welcome back</h1>
+    <p class="text-[var(--color-muted)] text-sm mb-8">Enter your mobile number to continue</p>
+
+    <!-- Step 1: Phone input -->
+    <div id="step-phone">
+      <form id="phone-form" novalidate>
+        <div class="mb-4">
+          <label for="phone" class="block text-sm font-medium mb-1.5">Mobile number</label>
+          <div class="flex gap-2">
+            <span class="inline-flex items-center px-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-sm text-[var(--color-muted)] select-none">+91</span>
+            <input
+              id="phone"
+              type="tel"
+              inputmode="numeric"
+              pattern="[6-9][0-9]{9}"
+              maxlength="10"
+              placeholder="98765 43210"
+              autocomplete="tel-national"
+              required
+              class="flex-1 px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
+            />
+          </div>
+          <p id="phone-error" class="text-xs text-[var(--color-danger)] mt-1 hidden"></p>
+        </div>
+        <button
+          type="submit"
+          id="send-btn"
+          class="w-full py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-60"
+        >
+          Send OTP
+        </button>
+      </form>
+    </div>
+
+    <!-- Step 2: OTP input (hidden initially) -->
+    <div id="step-otp" class="hidden">
+      <p class="text-sm text-[var(--color-muted)] mb-6">
+        OTP sent to <span id="otp-phone-display" class="font-medium text-[var(--color-text)]"></span>.
+        <button id="change-phone" class="text-[var(--color-primary)] underline ml-1">Change</button>
+      </p>
+      <form id="otp-form" novalidate>
+        <div class="mb-4">
+          <label for="otp" class="block text-sm font-medium mb-1.5">Enter 6-digit OTP</label>
+          <input
+            id="otp"
+            type="text"
+            inputmode="numeric"
+            pattern="\d{6}"
+            maxlength="6"
+            placeholder="• • • • • •"
+            autocomplete="one-time-code"
+            required
+            class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm tracking-[0.4em] font-mono focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
+          />
+          <p id="otp-error" class="text-xs text-[var(--color-danger)] mt-1 hidden"></p>
+        </div>
+        <button
+          type="submit"
+          id="verify-btn"
+          class="w-full py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-60"
+        >
+          Verify OTP
+        </button>
+        <button
+          type="button"
+          id="resend-btn"
+          class="w-full mt-2 py-2 text-sm text-[var(--color-primary)] hover:underline disabled:opacity-50"
+          disabled
+        >
+          Resend OTP <span id="resend-timer">(30s)</span>
+        </button>
+      </form>
+    </div>
+
+    <p class="text-xs text-[var(--color-muted)] text-center mt-6">
+      New here? You'll be set up after verifying.
+    </p>
+  </div>
+</AuthLayout>
+
+<script>
+  const stepPhone = document.getElementById("step-phone")!;
+  const stepOtp = document.getElementById("step-otp")!;
+  const phoneInput = document.getElementById("phone") as HTMLInputElement;
+  const otpInput = document.getElementById("otp") as HTMLInputElement;
+  const phoneError = document.getElementById("phone-error")!;
+  const otpError = document.getElementById("otp-error")!;
+  const otpPhoneDisplay = document.getElementById("otp-phone-display")!;
+  const sendBtn = document.getElementById("send-btn") as HTMLButtonElement;
+  const verifyBtn = document.getElementById("verify-btn") as HTMLButtonElement;
+  const resendBtn = document.getElementById("resend-btn") as HTMLButtonElement;
+  const resendTimer = document.getElementById("resend-timer")!;
+  const changePhone = document.getElementById("change-phone")!;
+
+  let currentPhone = "";
+  let resendCountdown: ReturnType<typeof setInterval> | null = null;
+
+  function showError(el: HTMLElement, msg: string) {
+    el.textContent = msg;
+    el.classList.remove("hidden");
+  }
+  function clearError(el: HTMLElement) {
+    el.classList.add("hidden");
+  }
+
+  function startResendTimer() {
+    let secs = 30;
+    resendBtn.disabled = true;
+    resendTimer.textContent = `(${secs}s)`;
+    resendCountdown = setInterval(() => {
+      secs--;
+      resendTimer.textContent = `(${secs}s)`;
+      if (secs <= 0) {
+        clearInterval(resendCountdown!);
+        resendBtn.disabled = false;
+        resendTimer.textContent = "";
+      }
+    }, 1000);
+  }
+
+  async function sendOtp(phone: string) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = "Sending…";
+    clearError(phoneError);
+    try {
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json<{ error?: string }>();
+      if (!res.ok) throw new Error(data.error ?? "Failed to send OTP");
+
+      currentPhone = phone;
+      otpPhoneDisplay.textContent = "+91 " + phone.slice(0, 5) + " " + phone.slice(5);
+      stepPhone.classList.add("hidden");
+      stepOtp.classList.remove("hidden");
+      otpInput.focus();
+      startResendTimer();
+    } catch (e: unknown) {
+      showError(phoneError, e instanceof Error ? e.message : "Failed to send OTP");
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.textContent = "Send OTP";
+    }
+  }
+
+  document.getElementById("phone-form")!.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const raw = phoneInput.value.replace(/\D/g, "");
+    if (!/^[6-9]\d{9}$/.test(raw)) {
+      showError(phoneError, "Enter a valid 10-digit Indian mobile number");
+      return;
+    }
+    await sendOtp("+91" + raw);
+  });
+
+  document.getElementById("otp-form")!.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const otp = otpInput.value.trim();
+    if (!/^\d{6}$/.test(otp)) {
+      showError(otpError, "Enter the 6-digit OTP");
+      return;
+    }
+    verifyBtn.disabled = true;
+    verifyBtn.textContent = "Verifying…";
+    clearError(otpError);
+    try {
+      const res = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: currentPhone, otp }),
+      });
+      const data = await res.json<{ isNewUser?: boolean; user?: { role: string } | null; error?: string }>();
+      if (!res.ok) throw new Error(data.error ?? "Verification failed");
+
+      if (data.isNewUser || !data.user) {
+        window.location.href = "/auth/register";
+      } else {
+        window.location.href = `/dashboard/${data.user.role}`;
+      }
+    } catch (e: unknown) {
+      showError(otpError, e instanceof Error ? e.message : "Verification failed");
+      verifyBtn.disabled = false;
+      verifyBtn.textContent = "Verify OTP";
+    }
+  });
+
+  resendBtn.addEventListener("click", () => sendOtp(currentPhone));
+
+  changePhone.addEventListener("click", () => {
+    stepOtp.classList.add("hidden");
+    stepPhone.classList.remove("hidden");
+    if (resendCountdown) clearInterval(resendCountdown);
+    otpInput.value = "";
+    clearError(otpError);
+    phoneInput.focus();
+  });
+</script>

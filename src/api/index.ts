@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { authRoutes } from "./routes/auth";
+import { registerRoutes } from "./routes/register";
 import { doctorRoutes } from "./routes/doctors";
+import { doctorProfileRoutes } from "./routes/doctorProfile";
 import { patientRoutes } from "./routes/patients";
 import { consultationRoutes } from "./routes/consultation";
 import { uploadRoutes } from "./routes/upload";
@@ -27,6 +29,7 @@ app.use("/api/*", cors({ origin: "*", credentials: true }));
 
 // Public routes
 app.route("/api/auth", authRoutes);
+app.route("/api/auth/register", registerRoutes);
 app.route("/api/doctors", doctorRoutes);
 
 // Protected routes
@@ -38,6 +41,9 @@ app.use("/api/chat/*", authMiddleware);
 app.route("/api/consultation", consultationRoutes);
 app.route("/api/upload", uploadRoutes);
 app.route("/api/patients", patientRoutes);
+app.use("/api/doctors/profile", authMiddleware);
+app.use("/api/doctors/availability", authMiddleware);
+app.route("/api/doctors", doctorProfileRoutes);
 
 // WebSocket upgrade — proxy to ChatRoom Durable Object
 app.get("/api/chat/:consultationId", async (c) => {
