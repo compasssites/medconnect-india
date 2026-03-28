@@ -25,8 +25,19 @@ bucket_name = "medconnect-files"
 binding = "SESSIONS"
 id = "b2fab377ec7047c6948f84f6fd581489"
 
+# Astro's Cloudflare adapter uses a default built-in session binding named `SESSION`.
+[[kv_namespaces]]
+binding = "SESSION"
+id = "b2fab377ec7047c6948f84f6fd581489"
+
 # ChatRoom DO is defined in medconnect-chat-do worker, referenced here by script_name
 [durable_objects]
 bindings = [
   { name = "CHAT_ROOMS", class_name = "ChatRoom", script_name = "medconnect-chat-do" }
 ]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+html_handling = "auto-trailing-slash"
+not_found_handling = "404-page"

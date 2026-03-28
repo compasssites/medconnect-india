@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && cp .assetsignore dist/.assetsignore",
     "deploy:do": "npx wrangler deploy --config wrangler.chat-do.toml",
     "deploy:app": "npm run build && npx wrangler deploy",
     "deploy": "npm run deploy:do && npm run deploy:app",
