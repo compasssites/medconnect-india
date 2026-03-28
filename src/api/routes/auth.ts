@@ -9,6 +9,26 @@ import type { HonoEnv } from "../index";
 
 const app = new Hono<HonoEnv>();
 
+async function hasEmailProviderConfigured(env: HonoEnv["Bindings"]) {
+  const maybeGet = async (value: unknown) => {
+    if (!value) return undefined;
+    if (typeof value === "string") return value;
+    if (typeof value === "object" && value !== null && "get" in value && typeof (value as { get: unknown }).get === "function") {
+      return (value as { get(): Promise<string> }).get();
+    }
+    return undefined;
+  };
+
+  const [accessKeyId, secretAccessKey, region, from] = await Promise.all([
+    maybeGet(env.AWS_ACCESS_KEY_ID),
+    maybeGet(env.AWS_SECRET_ACCESS_KEY),
+    maybeGet(env.AWS_REGION),
+    maybeGet(env.AWS_SES_FROM_EMAIL),
+  ]);
+
+  return Boolean(accessKeyId && secretAccessKey && region && from);
+}
+
 // POST /api/auth/send-otp
 app.post("/send-otp", zValidator("json", sendOtpSchema), async (c) => {
   const { email } = c.req.valid("json");
@@ -19,9 +39,7 @@ app.post("/send-otp", zValidator("json", sendOtpSchema), async (c) => {
 
   const { devOtp } = await sendOtp(normalizedEmail, otp, c.env);
 
-  const hasEmailProvider = Boolean(
-    c.env.AWS_ACCESS_KEY_ID && c.env.AWS_SECRET_ACCESS_KEY && c.env.AWS_REGION && c.env.AWS_SES_FROM_EMAIL
-  );
+  const hasEmailProvider = await hasEmailProviderConfigured(c.env);
   return c.json({ success: true, ...(hasEmailProvider ? {} : { otp: devOtp }) });
 });
 

@@ -10,15 +10,19 @@ import { uploadRoutes } from "./routes/upload";
 import { authMiddleware } from "./middleware/auth";
 import type { ChatRoom } from "../lib/chat/ChatRoom";
 
+type SecretStoreBinding = {
+  get(): Promise<string>;
+};
+
 type Bindings = {
   DB: D1Database;
   FILES: R2Bucket;
   SESSIONS: KVNamespace;
   CHAT_ROOMS: DurableObjectNamespace<ChatRoom>;
-  AWS_ACCESS_KEY_ID?: string;
-  AWS_SECRET_ACCESS_KEY?: string;
-  AWS_REGION?: string;
-  AWS_SES_FROM_EMAIL?: string;
+  AWS_ACCESS_KEY_ID?: string | SecretStoreBinding;
+  AWS_SECRET_ACCESS_KEY?: string | SecretStoreBinding;
+  AWS_REGION?: string | SecretStoreBinding;
+  AWS_SES_FROM_EMAIL?: string | SecretStoreBinding;
   SESSION_SECRET: string;
   APP_URL: string;
 };
