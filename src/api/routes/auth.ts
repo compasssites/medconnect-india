@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { setCookie, deleteCookie, getCookie } from "hono/cookie";
+import { deleteCookie, getCookie } from "hono/cookie";
 import { sendOtpSchema, verifyOtpSchema } from "../validators/schemas";
 import { generateOtp, sendOtp } from "../../lib/auth/otp";
 import { createSession, destroySession, getSessionUser } from "../../lib/auth/session";
@@ -58,15 +58,12 @@ app.post("/verify-otp", zValidator("json", verifyOtpSchema), async (c) => {
   const user = await getUserByEmail(c.env.DB, normalizedEmail);
   const sessionToken = await createSession(c.env.SESSIONS, user?.id ?? null, normalizedEmail);
 
-  setCookie(c, "session", sessionToken, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "Lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+  return c.json({
+    success: true,
+    isNewUser: !user,
+    user: user ?? null,
+    sessionToken,
   });
-
-  return c.json({ success: true, isNewUser: !user, user: user ?? null });
 });
 
 // POST /api/auth/logout

@@ -196,8 +196,16 @@ if (session?.value) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: currentEmail, otp }),
       });
-      const data = await res.json<{ isNewUser?: boolean; user?: { role: string } | null; error?: string }>();
+      const data = await res.json<{
+        isNewUser?: boolean;
+        user?: { role: string } | null;
+        sessionToken?: string;
+        error?: string;
+      }>();
       if (!res.ok) throw new Error(data.error ?? "Verification failed");
+      if (!data.sessionToken) throw new Error("Could not start your session");
+
+      document.cookie = `session=${encodeURIComponent(data.sessionToken)}; Max-Age=${60 * 60 * 24 * 30}; Path=/; SameSite=Lax; Secure`;
 
       if (data.isNewUser || !data.user) {
         window.location.href = "/auth/register";
