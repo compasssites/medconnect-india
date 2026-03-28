@@ -1,0 +1,38 @@
+name = "medconnect"
+main = "dist/_worker.js"
+compatibility_date = "2025-03-28"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+MSG91_TEMPLATE_ID = ""
+APP_URL = "https://medconnect.in"
+
+# Secrets (set via `wrangler secret put`):
+# MSG91_AUTH_KEY
+# SESSION_SECRET
+
+[[d1_databases]]
+binding = "DB"
+database_name = "medconnect-db"
+database_id = "17121db9-4084-4b9c-9636-517dfa945ea8"
+migrations_dir = "src/lib/db/migrations"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "medconnect-files"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "b2fab377ec7047c6948f84f6fd581489"
+
+[durable_objects]
+bindings = [
+  { name = "CHAT_ROOMS", class_name = "ChatRoom" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]
+
+[assets]
+directory = "./dist/client"

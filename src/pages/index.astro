@@ -1,0 +1,69 @@
+---
+export const prerender = true;
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout>
+  <main id="main-content">
+    <!-- Hero -->
+    <section class="bg-white">
+      <div class="container py-20 text-center">
+        <h1 class="text-4xl md:text-5xl font-bold text-[var(--color-text)] mb-4 leading-tight">
+          Consult doctors <span class="text-[var(--color-primary)]">directly</span>.<br />
+          No middlemen. No commissions.
+        </h1>
+        <p class="text-lg text-[var(--color-muted)] max-w-xl mx-auto mb-8">
+          Connect with qualified doctors across India. All consultation fees go directly to your doctor — not to us.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-3 justify-center">
+          <a
+            href="/doctors"
+            class="inline-flex items-center justify-center px-6 py-3 rounded-lg bg-[var(--color-primary)] text-white font-semibold hover:bg-[var(--color-primary-dark)] transition-colors"
+          >
+            Find a Doctor
+          </a>
+          <a
+            href="/auth/register"
+            class="inline-flex items-center justify-center px-6 py-3 rounded-lg border border-[var(--color-border)] text-[var(--color-text)] font-semibold hover:bg-[var(--color-bg)] transition-colors"
+          >
+            Register as Doctor
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="bg-[var(--color-bg)]">
+      <div class="container py-16">
+        <h2 class="text-2xl font-bold text-center mb-12">How it works</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {[
+            { step: "1", title: "Find your doctor", desc: "Search by specialization, city, or name. See fees and availability upfront." },
+            { step: "2", title: "Send a request", desc: "Describe your symptoms. The doctor reviews and accepts on their terms." },
+            { step: "3", title: "Consult directly", desc: "Chat in real time. Pay your doctor directly via UPI — no platform cut." },
+          ].map(({ step, title, desc }) => (
+            <div class="bg-white rounded-xl p-6 border border-[var(--color-border)]">
+              <div class="w-10 h-10 rounded-full bg-[var(--color-primary)] text-white font-bold flex items-center justify-center mb-4">
+                {step}
+              </div>
+              <h3 class="font-semibold text-lg mb-2">{title}</h3>
+              <p class="text-[var(--color-muted)] text-sm">{desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-[var(--color-border)] bg-white">
+      <div class="container py-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-[var(--color-muted)]">
+        <span>MedConnect &mdash; By doctors, for patients.</span>
+        <nav class="flex gap-4">
+          <a href="/about" class="hover:text-[var(--color-text)] transition-colors">About</a>
+          <a href="/doctors" class="hover:text-[var(--color-text)] transition-colors">Find Doctors</a>
+          <a href="/auth/login" class="hover:text-[var(--color-text)] transition-colors">Sign in</a>
+        </nav>
+      </div>
+    </footer>
+  </main>
+</BaseLayout>

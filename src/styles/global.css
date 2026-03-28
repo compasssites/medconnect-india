@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* ─── Medical color palette ─────────────────────────────────────────────────
+   Primary: calm blue (#1e6fb0)
+   Secondary: soft green (#2d9f6a)
+   Neutral: warm grays
+   Accent: amber for CTAs
+────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --color-primary: #1e6fb0;
+  --color-primary-dark: #155a91;
+  --color-primary-light: #4a9fd4;
+  --color-secondary: #2d9f6a;
+  --color-secondary-dark: #1d7a50;
+  --color-accent: #f59e0b;
+  --color-danger: #dc2626;
+  --color-warning: #d97706;
+  --color-success: #16a34a;
+
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-border: #e2e8f0;
+  --color-text: #1e293b;
+  --color-muted: #64748b;
+
+  --radius: 0.5rem;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+}
+
+/* ─── Starwind UI overrides ─────────────────────────────────────────────── */
+
+/* Ensure starwind components pick up our palette via CSS vars */
+[data-starwind] {
+  --sw-primary: var(--color-primary);
+  --sw-radius: var(--radius);
+}
+
+/* ─── Utilities ─────────────────────────────────────────────────────────── */
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container {
+    padding-inline: 1.5rem;
+  }
+}
+
+/* ─── Focus ring ────────────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ─── Skip to content ───────────────────────────────────────────────────── */
+
+.skip-to-content {
+  position: absolute;
+  top: -100%;
+  left: 1rem;
+  z-index: 9999;
+  background: var(--color-primary);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+}
+
+.skip-to-content:focus {
+  top: 1rem;
+}

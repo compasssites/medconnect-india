@@ -1,0 +1,5 @@
+# Copy to .dev.vars for local development (never commit .dev.vars)
+MSG91_AUTH_KEY=your_msg91_auth_key
+MSG91_TEMPLATE_ID=your_msg91_template_id
+SESSION_SECRET=a_random_secret_string_at_least_32_chars
+APP_URL=http://localhost:4321

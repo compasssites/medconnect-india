@@ -1,0 +1,51 @@
+---
+import BaseLayout from "./BaseLayout.astro";
+
+interface Props {
+  title?: string;
+  role?: "doctor" | "patient";
+}
+
+const { title, role } = Astro.props;
+
+const doctorNav = [
+  { href: "/dashboard/doctor", label: "Dashboard" },
+  { href: "/dashboard/doctor/profile", label: "My Profile" },
+  { href: "/dashboard/doctor/settings", label: "Settings" },
+];
+
+const patientNav = [
+  { href: "/dashboard/patient", label: "Dashboard" },
+  { href: "/dashboard/patient/profile", label: "Profile" },
+  { href: "/doctors", label: "Find Doctors" },
+];
+
+const navLinks = role === "doctor" ? doctorNav : patientNav;
+---
+
+<BaseLayout title={title}>
+  <div class="min-h-dvh flex flex-col">
+    <!-- Top nav -->
+    <header class="bg-white border-b border-[var(--color-border)] sticky top-0 z-40">
+      <div class="container flex items-center justify-between h-14">
+        <a href="/" class="font-bold text-[var(--color-primary)] text-lg">MedConnect</a>
+        <nav class="hidden md:flex items-center gap-6 text-sm font-medium">
+          {navLinks.map(({ href, label }) => (
+            <a href={href} class="text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">
+              {label}
+            </a>
+          ))}
+        </nav>
+        <form action="/api/auth/logout" method="POST">
+          <button type="submit" class="text-sm text-[var(--color-muted)] hover:text-[var(--color-danger)] transition-colors">
+            Sign out
+          </button>
+        </form>
+      </div>
+    </header>
+
+    <main id="main-content" class="flex-1 container py-6">
+      <slot />
+    </main>
+  </div>
+</BaseLayout>
