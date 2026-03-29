@@ -1,4 +1,5 @@
-const PASSWORD_ITERATIONS = 210_000;
+export const PASSWORD_ITERATION_LIMIT = 100_000;
+const PASSWORD_ITERATIONS = PASSWORD_ITERATION_LIMIT;
 const PASSWORD_KEY_LENGTH = 32;
 
 function encodeBase64(value: Uint8Array) {
@@ -61,4 +62,8 @@ export async function verifyPassword(
 ) {
   const derivedHash = await deriveKey(password, decodeBase64(salt), iterations);
   return timingSafeEqual(derivedHash, decodeBase64(expectedHash));
+}
+
+export function isSupportedPasswordIterations(iterations?: number | null) {
+  return !iterations || iterations <= PASSWORD_ITERATION_LIMIT;
 }

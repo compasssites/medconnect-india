@@ -16,8 +16,11 @@ export const passwordSchema = z
   .regex(/[A-Za-z]/, "Include at least one letter")
   .regex(/\d/, "Include at least one number");
 
+const turnstileTokenSchema = z.string().trim().min(1).max(2048).optional();
+
 export const sendCodeSchema = z.object({
   email: emailSchema,
+  turnstileToken: turnstileTokenSchema,
 });
 
 export const verifyCodeSchema = z.object({
@@ -28,6 +31,7 @@ export const verifyCodeSchema = z.object({
 export const loginSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
+  turnstileToken: turnstileTokenSchema,
 });
 
 export const resetPasswordSchema = z.object({

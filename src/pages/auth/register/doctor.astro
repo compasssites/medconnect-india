@@ -2,26 +2,28 @@
 import AuthLayout from "../../../layouts/AuthLayout.astro";
 import { getSession, getSessionUser, updateSessionUserId } from "../../../lib/auth/session";
 import { ensureAdminUser, hasAdminAccount, listApprovedDoctors } from "../../../lib/db/queries";
+import { getTurnstileClientConfig } from "../../../lib/auth/turnstile";
 
-const session = Astro.cookies.get("session");
-if (!session?.value) return Astro.redirect("/auth/register");
+Astro.response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+Astro.response.headers.set("Pragma", "no-cache");
+Astro.response.headers.set("Expires", "0");
 
 const env = (Astro.locals as App.Locals).runtime?.env;
 if (!env) return Astro.redirect("/auth/login");
 
-const sessionData = await getSession(env.SESSIONS, session.value);
-if (!sessionData) return Astro.redirect("/auth/register");
+const sessionCookie = Astro.cookies.get("session")?.value;
+const sessionData = sessionCookie ? await getSession(env.SESSIONS, sessionCookie) : null;
 
-if (sessionData.userId) {
-  const existingUser = await getSessionUser(env.SESSIONS, env.DB, session.value);
+if (sessionData?.userId && sessionCookie) {
+  const existingUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
   if (existingUser?.role) return Astro.redirect(`/dashboard/${existingUser.role}`);
 }
 
 const adminEmail = env.ADMIN_EMAIL?.trim().toLowerCase();
-if (!sessionData.userId && adminEmail && sessionData.email === adminEmail) {
+if (sessionData && !sessionData.userId && sessionCookie && adminEmail && sessionData.email === adminEmail) {
   const adminUser = await ensureAdminUser(env.DB, sessionData.email);
   if (adminUser) {
-    await updateSessionUserId(env.SESSIONS, session.value, adminUser.id);
+    await updateSessionUserId(env.SESSIONS, sessionCookie, adminUser.id);
     return Astro.redirect("/dashboard/admin");
   }
 }
@@ -29,256 +31,564 @@ if (!sessionData.userId && adminEmail && sessionData.email === adminEmail) {
 const approvedDoctors = await listApprovedDoctors(env.DB);
 const adminExists = await hasAdminAccount(env.DB);
 const needsDoctorRecommendation = approvedDoctors.length > 0;
+const hasPendingRegistration = Boolean(sessionData && !sessionData.userId);
+const turnstile = getTurnstileClientConfig(env);
 ---
 
 <AuthLayout title="Doctor registration — MedConnect">
   <div class="rounded-2xl border border-[var(--color-border)] bg-white p-8 shadow-sm">
     <a href="/auth/register" class="mb-5 inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:underline">← Back</a>
     <h1 class="mb-1 text-2xl font-bold">Doctor registration</h1>
-    <p class="mb-6 text-sm text-[var(--color-muted)]">Set up your doctor account for {sessionData.email}.</p>
 
-    {needsDoctorRecommendation ? (
-      <div class="mb-6 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800">
-        Choose an approved doctor who can review your registration after you submit it.
-      </div>
-    ) : adminExists ? (
-      <div class="mb-6 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-        There are no approved doctors yet. Your registration will go to the admin dashboard for review.
-      </div>
-    ) : (
-      <div class="mb-6 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
-        No approved doctors exist yet, so the first doctor account will be approved directly.
-      </div>
-    )}
+    {hasPendingRegistration && sessionData ? (
+      <>
+        <p class="mb-6 text-sm text-[var(--color-muted)]">Set up your doctor account for {sessionData.email}.</p>
 
-    <form id="doctor-form" novalidate>
-      <div class="mb-4">
-        <label for="name" class="mb-1.5 block text-sm font-medium">Full name</label>
-        <input
-          id="name"
-          name="name"
-          type="text"
-          placeholder="Dr. Priya Sharma"
-          autocomplete="name"
-          required
-          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-        />
-      </div>
+        {needsDoctorRecommendation ? (
+          <div class="mb-6 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800">
+            Choose an approved doctor who can review your registration after you submit it.
+          </div>
+        ) : adminExists ? (
+          <div class="mb-6 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+            There are no approved doctors yet. Your registration will go to the admin dashboard for review.
+          </div>
+        ) : (
+          <div class="mb-6 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+            No approved doctors exist yet, so the first doctor account will be approved directly.
+          </div>
+        )}
 
-      <div class="mb-4">
-        <label for="phone" class="mb-1.5 block text-sm font-medium">Mobile number <span class="font-normal text-[var(--color-muted)]">(optional)</span></label>
-        <input
-          id="phone"
-          name="phone"
-          type="tel"
-          inputmode="numeric"
-          placeholder="+91 98765 43210"
-          autocomplete="tel"
-          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-        />
-      </div>
+        <form id="doctor-form" novalidate>
+          <div class="mb-4">
+            <label for="name" class="mb-1.5 block text-sm font-medium">Full name</label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              placeholder="Dr. Priya Sharma"
+              autocomplete="name"
+              required
+              class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+            />
+          </div>
 
-      <div class="mb-4">
-        <label for="specialization" class="mb-1.5 block text-sm font-medium">Specialization</label>
-        <input
-          id="specialization"
-          name="specialization"
-          type="text"
-          placeholder="General Physician"
-          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-        />
-      </div>
+          <div class="mb-4">
+            <label for="phone" class="mb-1.5 block text-sm font-medium">Mobile number <span class="font-normal text-[var(--color-muted)]">(optional)</span></label>
+            <input
+              id="phone"
+              name="phone"
+              type="tel"
+              inputmode="numeric"
+              placeholder="+91 98765 43210"
+              autocomplete="tel"
+              class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+            />
+          </div>
 
-      <div class="mb-4">
-        <label for="qualification" class="mb-1.5 block text-sm font-medium">Qualification</label>
-        <input
-          id="qualification"
-          name="qualification"
-          type="text"
-          placeholder="MBBS, MD"
-          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-        />
-      </div>
+          <div class="mb-4">
+            <label for="specialization" class="mb-1.5 block text-sm font-medium">Specialization</label>
+            <input
+              id="specialization"
+              name="specialization"
+              type="text"
+              placeholder="General Physician"
+              class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+            />
+          </div>
 
-      <div class="mb-4">
-        <label for="password" class="mb-1.5 block text-sm font-medium">Password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autocomplete="new-password"
-          placeholder="Use at least 8 characters"
-          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-        />
-      </div>
+          <div class="mb-4">
+            <label for="qualification" class="mb-1.5 block text-sm font-medium">Qualification</label>
+            <input
+              id="qualification"
+              name="qualification"
+              type="text"
+              placeholder="MBBS, MD"
+              class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+            />
+          </div>
 
-      <div class="mb-4">
-        <label for="confirm-password" class="mb-1.5 block text-sm font-medium">Confirm password</label>
-        <input
-          id="confirm-password"
-          type="password"
-          autocomplete="new-password"
-          placeholder="Re-enter your password"
-          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-        />
-      </div>
+          <div class="mb-4">
+            <label for="password" class="mb-1.5 block text-sm font-medium">Password</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              placeholder="Use at least 8 characters"
+              class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+            />
+          </div>
 
-      <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <label for="reg-number" class="mb-1.5 block text-sm font-medium">Registration number</label>
-          <input
-            id="reg-number"
-            name="registrationNumber"
-            type="text"
-            placeholder="MH-12345"
-            class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-          />
-        </div>
-        <div>
-          <label for="reg-council" class="mb-1.5 block text-sm font-medium">Council</label>
-          <input
-            id="reg-council"
-            name="registrationCouncil"
-            type="text"
-            placeholder="Maharashtra Medical Council"
-            class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-          />
-        </div>
-      </div>
+          <div class="mb-4">
+            <label for="confirm-password" class="mb-1.5 block text-sm font-medium">Confirm password</label>
+            <input
+              id="confirm-password"
+              type="password"
+              autocomplete="new-password"
+              placeholder="Re-enter your password"
+              class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+            />
+          </div>
 
-      <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <label for="city" class="mb-1.5 block text-sm font-medium">City</label>
-          <input
-            id="city"
-            name="city"
-            type="text"
-            placeholder="Mumbai"
-            class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-          />
-        </div>
-        <div>
-          <label for="state" class="mb-1.5 block text-sm font-medium">State</label>
-          <input
-            id="state"
-            name="state"
-            type="text"
-            placeholder="Maharashtra"
-            class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-          />
-        </div>
-      </div>
+          <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label for="reg-number" class="mb-1.5 block text-sm font-medium">Registration number</label>
+              <input
+                id="reg-number"
+                name="registrationNumber"
+                type="text"
+                placeholder="MH-12345"
+                class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              />
+            </div>
+            <div>
+              <label for="reg-council" class="mb-1.5 block text-sm font-medium">Council</label>
+              <input
+                id="reg-council"
+                name="registrationCouncil"
+                type="text"
+                placeholder="Maharashtra Medical Council"
+                class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              />
+            </div>
+          </div>
 
-      {needsDoctorRecommendation && (
-        <div class="mb-4">
-          <label for="recommended-by" class="mb-1.5 block text-sm font-medium">Recommended by</label>
-          <select
-            id="recommended-by"
-            name="recommendedByUserId"
-            class="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label for="city" class="mb-1.5 block text-sm font-medium">City</label>
+              <input
+                id="city"
+                name="city"
+                type="text"
+                placeholder="Mumbai"
+                class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              />
+            </div>
+            <div>
+              <label for="state" class="mb-1.5 block text-sm font-medium">State</label>
+              <input
+                id="state"
+                name="state"
+                type="text"
+                placeholder="Maharashtra"
+                class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              />
+            </div>
+          </div>
+
+          {needsDoctorRecommendation && (
+            <div class="mb-4">
+              <label for="recommended-by" class="mb-1.5 block text-sm font-medium">Recommended by</label>
+              <select
+                id="recommended-by"
+                name="recommendedByUserId"
+                class="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              >
+                <option value="">Choose an approved doctor</option>
+                {approvedDoctors.map((doctor) => (
+                  <option value={doctor.userId}>
+                    {doctor.name} · {doctor.specialization}{doctor.city ? ` · ${doctor.city}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p class="mt-1 text-xs text-[var(--color-muted)]">The selected doctor will see your approval request in their dashboard.</p>
+            </div>
+          )}
+
+          <p id="form-error" class="mb-3 hidden text-xs text-[var(--color-danger)]"></p>
+
+          <button
+            type="submit"
+            id="submit-btn"
+            class="w-full rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-dark)] disabled:opacity-60"
           >
-            <option value="">Choose an approved doctor</option>
-            {approvedDoctors.map((doctor) => (
-              <option value={doctor.userId}>
-                {doctor.name} · {doctor.specialization}{doctor.city ? ` · ${doctor.city}` : ""}
-              </option>
-            ))}
-          </select>
-          <p class="mt-1 text-xs text-[var(--color-muted)]">The selected doctor will see your approval request in their dashboard.</p>
+            Create doctor account
+          </button>
+        </form>
+      </>
+    ) : (
+      <>
+        <p class="mb-8 text-sm text-[var(--color-muted)]">Verify your email, then set your password and finish your doctor registration.</p>
+
+        <div id="step-email">
+          <div class="mb-4">
+            <label for="email" class="mb-1.5 block text-sm font-medium">Email address</label>
+            <input
+              id="email"
+              type="email"
+              placeholder="you@example.com"
+              autocomplete="email"
+              class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+            />
+          </div>
+          <p id="email-error" class="mb-3 hidden text-xs text-[var(--color-danger)]"></p>
+          <button
+            type="button"
+            id="send-btn"
+            class="w-full rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-dark)] disabled:opacity-60"
+          >
+            Email code
+          </button>
         </div>
-      )}
 
-      <p id="form-error" class="mb-3 hidden text-xs text-[var(--color-danger)]"></p>
+        <div id="step-code" class="hidden">
+          <p class="mb-3 text-sm text-[var(--color-muted)]">
+            Enter the code sent to <span id="email-display" class="font-medium text-[var(--color-text)]"></span>.
+            <button id="change-email" class="ml-1 text-[var(--color-primary)] underline">Change</button>
+          </p>
 
-      <button
-        type="submit"
-        id="submit-btn"
-        class="w-full rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-dark)] disabled:opacity-60"
-      >
-        Create doctor account
-      </button>
-    </form>
+          <div id="dev-code-banner" class="mb-4 hidden rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p class="mb-0.5 text-xs font-medium text-amber-700">Email sending not configured — your code:</p>
+            <p id="dev-code-value" class="text-2xl font-mono font-bold tracking-widest text-amber-900"></p>
+          </div>
+
+          <div class="mb-4">
+            <label for="code" class="mb-1.5 block text-sm font-medium">6-digit code</label>
+            <input
+              id="code"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="12"
+              placeholder="123456"
+              class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-mono tracking-[0.4em] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+            />
+          </div>
+
+          <p id="code-error" class="mb-3 hidden text-xs text-[var(--color-danger)]"></p>
+
+          <button
+            type="button"
+            id="verify-btn"
+            class="w-full rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-dark)] disabled:opacity-60"
+          >
+            Continue
+          </button>
+
+          <button
+            type="button"
+            id="resend-btn"
+            class="mt-2 w-full py-2 text-sm text-[var(--color-primary)] hover:underline disabled:opacity-50"
+            disabled
+          >
+            Resend code <span id="resend-timer">(30s)</span>
+          </button>
+        </div>
+
+        {turnstile.enabled && (
+          <>
+            <div class="mt-6">
+              <p class="mb-2 text-sm font-medium">Security check</p>
+              <div id="doctor-register-turnstile" class="min-h-[68px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-2"></div>
+              <p class="mt-2 text-xs text-[var(--color-muted)]">Complete this before sending or resending a code.</p>
+            </div>
+            <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
+          </>
+        )}
+      </>
+    )}
   </div>
 </AuthLayout>
 
-<script define:vars={{ needsDoctorRecommendation }}>
-  const form = document.getElementById("doctor-form") as HTMLFormElement;
-  const submitBtn = document.getElementById("submit-btn") as HTMLButtonElement;
-  const formError = document.getElementById("form-error") as HTMLParagraphElement;
+{hasPendingRegistration && (
+  <script define:vars={{ needsDoctorRecommendation }}>
+    const form = document.getElementById("doctor-form") as HTMLFormElement;
+    const submitBtn = document.getElementById("submit-btn") as HTMLButtonElement;
+    const formError = document.getElementById("form-error") as HTMLParagraphElement;
 
-  function readValue(id: string) {
-    return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement).value.trim();
-  }
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    formError.classList.add("hidden");
-
-    const body: Record<string, string> = {
-      role: "doctor",
-      name: readValue("name"),
-      phone: readValue("phone"),
-      specialization: readValue("specialization"),
-      qualification: readValue("qualification"),
-      password: readValue("password"),
-      registrationNumber: readValue("reg-number"),
-      registrationCouncil: readValue("reg-council"),
-      city: readValue("city"),
-      state: readValue("state"),
-    };
-
-    if (needsDoctorRecommendation) {
-      body.recommendedByUserId = readValue("recommended-by");
+    function readValue(id: string) {
+      return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement).value.trim();
     }
 
-    if (body.name.length < 2) {
-      formError.textContent = "Please enter your full name";
-      formError.classList.remove("hidden");
-      return;
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      formError.classList.add("hidden");
+
+      const body: Record<string, string> = {
+        role: "doctor",
+        name: readValue("name"),
+        phone: readValue("phone"),
+        specialization: readValue("specialization"),
+        qualification: readValue("qualification"),
+        password: readValue("password"),
+        registrationNumber: readValue("reg-number"),
+        registrationCouncil: readValue("reg-council"),
+        city: readValue("city"),
+        state: readValue("state"),
+      };
+
+      if (needsDoctorRecommendation) {
+        body.recommendedByUserId = readValue("recommended-by");
+      }
+
+      if (body.name.length < 2) {
+        formError.textContent = "Please enter your full name";
+        formError.classList.remove("hidden");
+        return;
+      }
+
+      if (!body.specialization || !body.qualification || !body.registrationNumber || !body.registrationCouncil) {
+        formError.textContent = "Please fill all required doctor details";
+        formError.classList.remove("hidden");
+        return;
+      }
+
+      if (body.password.length < 8 || !/[A-Za-z]/.test(body.password) || !/\d/.test(body.password)) {
+        formError.textContent = "Use at least 8 characters with letters and numbers";
+        formError.classList.remove("hidden");
+        return;
+      }
+
+      if (body.password !== readValue("confirm-password")) {
+        formError.textContent = "Passwords do not match";
+        formError.classList.remove("hidden");
+        return;
+      }
+
+      if (needsDoctorRecommendation && !body.recommendedByUserId) {
+        formError.textContent = "Please choose an approved doctor for review";
+        formError.classList.remove("hidden");
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Creating account…";
+
+      try {
+        const response = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        const data = await response.json<{ error?: string; role?: string }>();
+        if (!response.ok) throw new Error(data.error ?? "Registration failed");
+        window.location.href = `/dashboard/${data.role ?? "doctor"}`;
+      } catch (error: unknown) {
+        formError.textContent = error instanceof Error ? error.message : "Registration failed";
+        formError.classList.remove("hidden");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Create doctor account";
+      }
+    });
+  </script>
+)}
+
+{!hasPendingRegistration && (
+  <script define:vars={{ turnstileEnabled: turnstile.enabled, turnstileSiteKey: turnstile.siteKey }}>
+    const stepEmail = document.getElementById("step-email")!;
+    const stepCode = document.getElementById("step-code")!;
+    const emailInput = document.getElementById("email") as HTMLInputElement;
+    const codeInput = document.getElementById("code") as HTMLInputElement;
+    const emailDisplay = document.getElementById("email-display")!;
+    const emailError = document.getElementById("email-error")!;
+    const codeError = document.getElementById("code-error")!;
+    const sendBtn = document.getElementById("send-btn") as HTMLButtonElement;
+    const verifyBtn = document.getElementById("verify-btn") as HTMLButtonElement;
+    const resendBtn = document.getElementById("resend-btn") as HTMLButtonElement;
+    const resendTimer = document.getElementById("resend-timer")!;
+    const changeEmail = document.getElementById("change-email") as HTMLButtonElement;
+    const devCodeBanner = document.getElementById("dev-code-banner")!;
+    const devCodeValue = document.getElementById("dev-code-value")!;
+
+    let currentEmail = "";
+    let resendCountdown: ReturnType<typeof setInterval> | null = null;
+    let turnstileWidgetId: string | null = null;
+
+    function getTurnstileApi() {
+      return (window as Window & {
+        turnstile?: {
+          render: (container: string, options: Record<string, unknown>) => string;
+          getResponse: (widgetId: string) => string;
+          reset: (widgetId: string) => void;
+        };
+      }).turnstile;
     }
 
-    if (!body.specialization || !body.qualification || !body.registrationNumber || !body.registrationCouncil) {
-      formError.textContent = "Please fill all required doctor details";
-      formError.classList.remove("hidden");
-      return;
-    }
-
-    if (body.password.length < 8 || !/[A-Za-z]/.test(body.password) || !/\d/.test(body.password)) {
-      formError.textContent = "Use at least 8 characters with letters and numbers";
-      formError.classList.remove("hidden");
-      return;
-    }
-
-    if (body.password !== readValue("confirm-password")) {
-      formError.textContent = "Passwords do not match";
-      formError.classList.remove("hidden");
-      return;
-    }
-
-    if (needsDoctorRecommendation && !body.recommendedByUserId) {
-      formError.textContent = "Please choose an approved doctor for review";
-      formError.classList.remove("hidden");
-      return;
-    }
-
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Creating account…";
-
-    try {
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+    function ensureTurnstileWidget() {
+      if (!turnstileEnabled || turnstileWidgetId) return;
+      const api = getTurnstileApi();
+      if (!api) return;
+      turnstileWidgetId = api.render("#doctor-register-turnstile", {
+        sitekey: turnstileSiteKey,
+        action: "register",
+        theme: "light",
       });
-
-      const data = await response.json<{ error?: string; role?: string }>();
-      if (!response.ok) throw new Error(data.error ?? "Registration failed");
-      window.location.href = `/dashboard/${data.role ?? "doctor"}`;
-    } catch (error: unknown) {
-      formError.textContent = error instanceof Error ? error.message : "Registration failed";
-      formError.classList.remove("hidden");
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Create doctor account";
     }
-  });
-</script>
+
+    function readTurnstileToken() {
+      if (!turnstileEnabled || !turnstileWidgetId) return "";
+      return getTurnstileApi()?.getResponse(turnstileWidgetId) ?? "";
+    }
+
+    function resetTurnstile() {
+      if (!turnstileEnabled || !turnstileWidgetId) return;
+      getTurnstileApi()?.reset(turnstileWidgetId);
+    }
+
+    function showError(target: HTMLElement, message: string) {
+      target.textContent = message;
+      target.classList.remove("hidden");
+    }
+
+    function clearError(target: HTMLElement) {
+      target.classList.add("hidden");
+    }
+
+    function startResendTimer() {
+      let seconds = 30;
+      resendBtn.disabled = true;
+      resendTimer.textContent = `(${seconds}s)`;
+      resendCountdown = setInterval(() => {
+        seconds -= 1;
+        resendTimer.textContent = `(${seconds}s)`;
+        if (seconds <= 0) {
+          clearInterval(resendCountdown!);
+          resendBtn.disabled = false;
+          resendTimer.textContent = "";
+        }
+      }, 1000);
+    }
+
+    async function sendCode(email: string) {
+      clearError(emailError);
+      clearError(codeError);
+
+      const turnstileToken = readTurnstileToken();
+      if (turnstileEnabled && !turnstileToken) {
+        showError(emailError, "Please complete the security check");
+        return;
+      }
+
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending…";
+
+      try {
+        const response = await fetch("/api/auth/send-registration-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, turnstileToken }),
+        });
+
+        const data = await response.json<{ error?: string; code?: string }>();
+        if (!response.ok) throw new Error(data.error ?? "Failed to send code");
+
+        currentEmail = email;
+        emailDisplay.textContent = email;
+        stepEmail.classList.add("hidden");
+        stepCode.classList.remove("hidden");
+
+        if (data.code) {
+          devCodeValue.textContent = data.code;
+          devCodeBanner.classList.remove("hidden");
+          codeInput.value = data.code;
+        } else {
+          devCodeBanner.classList.add("hidden");
+          codeInput.value = "";
+        }
+
+        startResendTimer();
+        codeInput.focus();
+      } catch (error: unknown) {
+        showError(emailError, error instanceof Error ? error.message : "Failed to send code");
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Email code";
+        resetTurnstile();
+      }
+    }
+
+    async function handleSendCode() {
+      const email = emailInput.value.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        showError(emailError, "Enter a valid email address");
+        return;
+      }
+
+      await sendCode(email);
+    }
+
+    async function handleVerifyCode() {
+      clearError(codeError);
+      const code = codeInput.value.replace(/\D/g, "").slice(0, 6);
+      codeInput.value = code;
+
+      if (!/^\d{6}$/.test(code)) {
+        showError(codeError, "Enter the 6-digit code");
+        return;
+      }
+
+      verifyBtn.disabled = true;
+      verifyBtn.textContent = "Verifying…";
+
+      try {
+        const response = await fetch("/api/auth/verify-registration-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: currentEmail, code }),
+        });
+
+        const data = await response.json<{ error?: string }>();
+        if (!response.ok) throw new Error(data.error ?? "Verification failed");
+        window.location.href = "/auth/register/doctor";
+      } catch (error: unknown) {
+        showError(codeError, error instanceof Error ? error.message : "Verification failed");
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = "Continue";
+      }
+    }
+
+    sendBtn.addEventListener("click", () => {
+      void handleSendCode();
+    });
+
+    verifyBtn.addEventListener("click", () => {
+      void handleVerifyCode();
+    });
+
+    resendBtn.addEventListener("click", () => {
+      void sendCode(currentEmail);
+    });
+
+    emailInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void handleSendCode();
+      }
+    });
+
+    codeInput.addEventListener("input", () => {
+      const digits = codeInput.value.replace(/\D/g, "").slice(0, 6);
+      if (digits !== codeInput.value) codeInput.value = digits;
+    });
+
+    codeInput.addEventListener("paste", (event) => {
+      event.preventDefault();
+      const pasted = event.clipboardData?.getData("text") ?? "";
+      codeInput.value = pasted.replace(/\D/g, "").slice(0, 6);
+    });
+
+    changeEmail.addEventListener("click", () => {
+      stepCode.classList.add("hidden");
+      stepEmail.classList.remove("hidden");
+      clearError(codeError);
+      clearError(emailError);
+      if (resendCountdown) clearInterval(resendCountdown);
+      resendBtn.disabled = true;
+      resendTimer.textContent = "(30s)";
+      codeInput.value = "";
+      emailInput.focus();
+      resetTurnstile();
+    });
+
+    if (turnstileEnabled) {
+      const waitForTurnstile = window.setInterval(() => {
+        if (getTurnstileApi()) {
+          ensureTurnstileWidget();
+          window.clearInterval(waitForTurnstile);
+        }
+      }, 150);
+      window.addEventListener("load", ensureTurnstileWidget, { once: true });
+    }
+  </script>
+)}

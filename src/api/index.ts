@@ -27,6 +27,9 @@ type Bindings = {
   AWS_SECRET_ACCESS_KEY?: string | SecretStoreBinding;
   AWS_REGION?: string | SecretStoreBinding;
   AWS_SES_FROM_EMAIL?: string | SecretStoreBinding;
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET_KEY?: string | SecretStoreBinding;
+  TURNSTILE_ENFORCE_AFTER?: string;
   SESSION_SECRET: string;
   ADMIN_EMAIL?: string;
   APP_URL: string;

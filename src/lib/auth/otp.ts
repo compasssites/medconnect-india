@@ -87,7 +87,7 @@ export async function sendOtp(
 
   if (!response.ok) {
     const message = await response.text();
-    throw new Error(`Failed to send OTP email: ${message}`);
+    throw new Error(`Failed to send verification email: ${message}`);
   }
 
   return { devOtp: "" };

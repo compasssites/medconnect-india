@@ -11,8 +11,13 @@ import {
   verifyCodeSchema,
 } from "../validators/schemas";
 import { generateOtp, sendOtp } from "../../lib/auth/otp";
-import { hashPassword, verifyPassword } from "../../lib/auth/password";
+import {
+  hashPassword,
+  isSupportedPasswordIterations,
+  verifyPassword,
+} from "../../lib/auth/password";
 import { createSession, destroySession, getSessionUser } from "../../lib/auth/session";
+import { verifyTurnstileToken } from "../../lib/auth/turnstile";
 import { getUserAuthByEmail, getUserByEmail } from "../../lib/db/queries";
 import { users } from "../../lib/db/schema";
 import type { HonoEnv } from "../index";
@@ -68,10 +73,33 @@ async function sendEmailCode(
   return hasEmailProvider ? {} : { code: devOtp };
 }
 
+async function ensureTurnstile(
+  c: Context<HonoEnv>,
+  token: string | undefined,
+  action: "login" | "register" | "reset-password"
+) {
+  const error = await verifyTurnstileToken({
+    env: c.env,
+    token,
+    expectedAction: action,
+    expectedHostname: new URL(c.req.url).hostname,
+    remoteIp: c.req.header("CF-Connecting-IP") ?? undefined,
+  });
+
+  if (error) {
+    return c.json({ error }, 400);
+  }
+
+  return null;
+}
+
 // POST /api/auth/login
 app.post("/login", zValidator("json", loginSchema), async (c) => {
   try {
-    const { email, password } = c.req.valid("json");
+    const { email, password, turnstileToken } = c.req.valid("json");
+    const turnstileResponse = await ensureTurnstile(c, turnstileToken, "login");
+    if (turnstileResponse) return turnstileResponse;
+
     const normalizedEmail = email.trim().toLowerCase();
     const user = await getUserAuthByEmail(c.env.DB, normalizedEmail);
 
@@ -81,6 +109,13 @@ app.post("/login", zValidator("json", loginSchema), async (c) => {
 
     if (!user.passwordHash || !user.passwordSalt) {
       return c.json({ error: "Password not set yet. Use Forgot password to create one." }, 400);
+    }
+
+    if (!isSupportedPasswordIterations(user.passwordIterations)) {
+      return c.json(
+        { error: "This password needs a one-time reset. Use Forgot password to set a new one." },
+        400
+      );
     }
 
     const isValidPassword = await verifyPassword(
@@ -121,7 +156,10 @@ app.post("/login", zValidator("json", loginSchema), async (c) => {
 
 // POST /api/auth/send-registration-code
 app.post("/send-registration-code", zValidator("json", sendCodeSchema), async (c) => {
-  const { email } = c.req.valid("json");
+  const { email, turnstileToken } = c.req.valid("json");
+  const turnstileResponse = await ensureTurnstile(c, turnstileToken, "register");
+  if (turnstileResponse) return turnstileResponse;
+
   const normalizedEmail = email.trim().toLowerCase();
 
   if (normalizedEmail === c.env.ADMIN_EMAIL?.trim().toLowerCase()) {
@@ -172,7 +210,10 @@ app.post("/verify-registration-code", zValidator("json", verifyCodeSchema), asyn
 
 // POST /api/auth/send-reset-code
 app.post("/send-reset-code", zValidator("json", sendCodeSchema), async (c) => {
-  const { email } = c.req.valid("json");
+  const { email, turnstileToken } = c.req.valid("json");
+  const turnstileResponse = await ensureTurnstile(c, turnstileToken, "reset-password");
+  if (turnstileResponse) return turnstileResponse;
+
   const normalizedEmail = email.trim().toLowerCase();
   const user = await getUserByEmail(c.env.DB, normalizedEmail);
 

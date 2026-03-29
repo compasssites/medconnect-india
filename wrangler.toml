@@ -8,10 +8,13 @@ MSG91_TEMPLATE_ID = ""
 APP_URL = "https://medconnect.in"
 SES_FROM_EMAIL = "forms@mycompass.in"
 ADMIN_EMAIL = "mywebsite@mycompass.in"
+TURNSTILE_SITE_KEY = ""
+TURNSTILE_ENFORCE_AFTER = "2026-04-29T00:00:00Z"
 
 # Secrets (set via `wrangler secret put`):
 # MSG91_AUTH_KEY
 # SESSION_SECRET
+# TURNSTILE_SECRET_KEY
 
 [[d1_databases]]
 binding = "DB"

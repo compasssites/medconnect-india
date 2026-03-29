@@ -1,6 +1,7 @@
 ---
 import AuthLayout from "../../layouts/AuthLayout.astro";
 import { getSessionUser } from "../../lib/auth/session";
+import { getTurnstileClientConfig } from "../../lib/auth/turnstile";
 
 Astro.response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
 Astro.response.headers.set("Pragma", "no-cache");
@@ -15,6 +16,8 @@ if (env && sessionCookie) {
     return Astro.redirect(`/dashboard/${user.role}`);
   }
 }
+
+const turnstile = getTurnstileClientConfig(env);
 ---
 
 <AuthLayout title="Sign in — MedConnect">
@@ -48,6 +51,16 @@ if (env && sessionCookie) {
         />
       </div>
 
+      {turnstile.enabled && (
+        <>
+          <div class="mb-4">
+            <label class="mb-1.5 block text-sm font-medium">Security check</label>
+            <div id="login-turnstile" class="min-h-[68px] rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-2"></div>
+          </div>
+          <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
+        </>
+      )}
+
       <p id="form-error" class="mb-3 hidden text-xs text-[var(--color-danger)]"></p>
 
       <button
@@ -66,12 +79,44 @@ if (env && sessionCookie) {
   </div>
 </AuthLayout>
 
-<script>
+<script define:vars={{ turnstileEnabled: turnstile.enabled, turnstileSiteKey: turnstile.siteKey }}>
   const form = document.getElementById("login-form") as HTMLFormElement;
   const emailInput = document.getElementById("email") as HTMLInputElement;
   const passwordInput = document.getElementById("password") as HTMLInputElement;
   const submitBtn = document.getElementById("submit-btn") as HTMLButtonElement;
   const formError = document.getElementById("form-error") as HTMLParagraphElement;
+  let turnstileWidgetId: string | null = null;
+
+  function getTurnstileApi() {
+    return (window as Window & {
+      turnstile?: {
+        render: (container: string, options: Record<string, unknown>) => string;
+        getResponse: (widgetId: string) => string;
+        reset: (widgetId: string) => void;
+      };
+    }).turnstile;
+  }
+
+  function ensureTurnstileWidget() {
+    if (!turnstileEnabled || turnstileWidgetId) return;
+    const api = getTurnstileApi();
+    if (!api) return;
+    turnstileWidgetId = api.render("#login-turnstile", {
+      sitekey: turnstileSiteKey,
+      action: "login",
+      theme: "light",
+    });
+  }
+
+  function readTurnstileToken() {
+    if (!turnstileEnabled || !turnstileWidgetId) return "";
+    return getTurnstileApi()?.getResponse(turnstileWidgetId) ?? "";
+  }
+
+  function resetTurnstile() {
+    if (!turnstileEnabled || !turnstileWidgetId) return;
+    getTurnstileApi()?.reset(turnstileWidgetId);
+  }
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -92,6 +137,13 @@ if (env && sessionCookie) {
       return;
     }
 
+    const turnstileToken = readTurnstileToken();
+    if (turnstileEnabled && !turnstileToken) {
+      formError.textContent = "Please complete the security check";
+      formError.classList.remove("hidden");
+      return;
+    }
+
     submitBtn.disabled = true;
     submitBtn.textContent = "Signing in…";
 
@@ -99,7 +151,7 @@ if (env && sessionCookie) {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, turnstileToken }),
       });
 
       const data = await response.json<{ error?: string; user?: { role: string } }>();
@@ -110,6 +162,17 @@ if (env && sessionCookie) {
       formError.classList.remove("hidden");
       submitBtn.disabled = false;
       submitBtn.textContent = "Sign in";
+      resetTurnstile();
     }
   });
+
+  if (turnstileEnabled) {
+    const waitForTurnstile = window.setInterval(() => {
+      if (getTurnstileApi()) {
+        ensureTurnstileWidget();
+        window.clearInterval(waitForTurnstile);
+      }
+    }, 150);
+    window.addEventListener("load", ensureTurnstileWidget, { once: true });
+  }
 </script>
