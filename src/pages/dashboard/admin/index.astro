@@ -149,31 +149,31 @@ for (const id of recommenderIds) {
       <h2 class="font-semibold">Manage Doctors</h2>
     </div>
 
-      <form method="GET" class="mb-5 flex flex-wrap items-center gap-3 xl:flex-nowrap">
+      <form method="GET" class="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <input
           type="text"
           name="doctorName"
           value={doctorName}
           placeholder="Name"
-          class="min-w-0 basis-[11rem] rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] xl:w-[11rem] xl:flex-none"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         />
         <input
           type="text"
           name="doctorSpecialization"
           value={doctorSpecialization}
           placeholder="Specialization"
-          class="min-w-0 basis-[11rem] rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] xl:w-[11rem] xl:flex-none"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         />
         <input
           type="text"
           name="doctorCity"
           value={doctorCity}
           placeholder="City"
-          class="min-w-0 basis-[9rem] rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] xl:w-[9rem] xl:flex-none"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         />
         <select
           name="doctorState"
-          class="min-w-0 basis-[10rem] rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] xl:w-[10rem] xl:flex-none"
+          class="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         >
           <option value="">All states</option>
           {INDIAN_STATES_AND_UTS.map((state) => (
@@ -182,7 +182,7 @@ for (const id of recommenderIds) {
         </select>
         <select
           name="doctorStatus"
-          class="min-w-0 basis-[9rem] rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] xl:w-[9rem] xl:flex-none"
+          class="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         >
           {[
             ["active", "Active"],
@@ -196,7 +196,7 @@ for (const id of recommenderIds) {
         </select>
         <select
           name="doctorMode"
-          class="min-w-0 basis-[9rem] rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] xl:w-[9rem] xl:flex-none"
+          class="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         >
           <option value="">All modes</option>
           {["online", "offline", "both"].map((mode) => (
@@ -205,7 +205,7 @@ for (const id of recommenderIds) {
         </select>
         <select
           name="doctorAvailability"
-          class="min-w-0 basis-[10rem] rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] xl:w-[10rem] xl:flex-none"
+          class="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         >
           {[
             ["all", "Any availability"],
@@ -215,7 +215,7 @@ for (const id of recommenderIds) {
             <option value={value} selected={doctorAvailability === value}>{label}</option>
           ))}
         </select>
-        <div class="flex gap-2 xl:ml-auto xl:flex-none">
+        <div class="flex gap-2 sm:justify-start lg:justify-end">
           <button
             type="submit"
             class="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-primary-dark)] transition-colors"
