@@ -41,7 +41,7 @@ const statusColors: Record<string, string> = {
 ---
 
 <DashboardLayout title="My Consultations — MedConnect" role="patient">
-  <div class="mb-6 flex items-center justify-between">
+  <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
     <div>
       <h1 class="text-xl font-bold">My Consultations</h1>
       <p class="text-sm text-[var(--color-muted)] mt-0.5">Welcome, {currentUser.name}</p>
@@ -52,17 +52,19 @@ const statusColors: Record<string, string> = {
   </div>
 
   <!-- Tabs -->
-  <div class="flex gap-1 bg-[var(--color-bg)] rounded-xl p-1 border border-[var(--color-border)] mb-5 w-fit">
-    {[
-      { key: "active", label: `Active (${active.length})` },
-      { key: "pending", label: `Pending (${pending.length})` },
-      { key: "history", label: "History" },
-    ].map(({ key, label }) => (
-      <a href={`?tab=${key}`}
-        class={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === key ? "bg-white shadow-sm text-[var(--color-text)]" : "text-[var(--color-muted)] hover:text-[var(--color-text)]"}`}>
-        {label}
-      </a>
-    ))}
+  <div class="mb-5 overflow-x-auto">
+    <div class="flex w-max gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-1">
+      {[
+        { key: "active", label: `Active (${active.length})` },
+        { key: "pending", label: `Pending (${pending.length})` },
+        { key: "history", label: "History" },
+      ].map(({ key, label }) => (
+        <a href={`?tab=${key}`}
+          class={`whitespace-nowrap px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === key ? "bg-white shadow-sm text-[var(--color-text)]" : "text-[var(--color-muted)] hover:text-[var(--color-text)]"}`}>
+          {label}
+        </a>
+      ))}
+    </div>
   </div>
 
   {tab === "active" && (
@@ -74,7 +76,7 @@ const statusColors: Record<string, string> = {
         </div>
       ) : active.map((c) => (
         <div class="bg-white rounded-xl border border-[var(--color-border)] p-5">
-          <div class="flex items-start justify-between gap-4 mb-3">
+          <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p class="font-semibold text-sm">{doctorMap[c.doctorId]?.name ?? "Doctor"}</p>
               <p class="text-xs text-[var(--color-muted)]">{doctorMap[c.doctorId]?.specialization}</p>
@@ -111,7 +113,7 @@ const statusColors: Record<string, string> = {
           No pending requests
         </div>
       ) : pending.map((c) => (
-        <div class="bg-white rounded-xl border border-[var(--color-border)] p-5 flex items-center justify-between gap-4">
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p class="font-semibold text-sm">{doctorMap[c.doctorId]?.name ?? "Doctor"}</p>
             <p class="text-xs text-[var(--color-muted)]">{c.chiefComplaint}</p>
@@ -132,7 +134,7 @@ const statusColors: Record<string, string> = {
           No past consultations
         </div>
       ) : history.map((c) => (
-        <div class="bg-white rounded-xl border border-[var(--color-border)] p-4 flex items-center justify-between gap-4">
+        <div class="bg-white rounded-xl border border-[var(--color-border)] p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p class="text-sm font-medium">{doctorMap[c.doctorId]?.name ?? "Doctor"}</p>
             <p class="text-xs text-[var(--color-muted)]">{c.chiefComplaint}</p>

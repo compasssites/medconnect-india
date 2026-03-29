@@ -30,9 +30,8 @@ const navLinks = role === "doctor" ? doctorNav : role === "admin" ? adminNav : p
 
 <BaseLayout title={title}>
   <div class="min-h-dvh flex flex-col">
-    <!-- Top nav -->
-    <header class="bg-white border-b border-[var(--color-border)] sticky top-0 z-40">
-      <div class="container flex items-center justify-between h-14">
+    <header class="sticky top-0 z-40 border-b border-[var(--color-border)] bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85">
+      <div class="container flex min-h-14 items-center justify-between gap-3 py-2">
         <a href="/" class="font-bold text-[var(--color-primary)] text-lg">MedConnect</a>
         <nav class="hidden md:flex items-center gap-6 text-sm font-medium">
           {navLinks.map(({ href, label }) => (
@@ -47,9 +46,24 @@ const navLinks = role === "doctor" ? doctorNav : role === "admin" ? adminNav : p
           </button>
         </form>
       </div>
+
+      <div class="border-t border-[var(--color-border)] md:hidden">
+        <div class="container overflow-x-auto">
+          <nav class="flex min-w-max items-center gap-2 py-3 text-sm font-medium">
+            {navLinks.map(({ href, label }) => (
+              <a
+                href={href}
+                class="rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-[var(--color-muted)] transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-text)]"
+              >
+                {label}
+              </a>
+            ))}
+          </nav>
+        </div>
+      </div>
     </header>
 
-    <main id="main-content" class="flex-1 container py-6">
+    <main id="main-content" class="flex-1 container py-5 md:py-6">
       <slot />
     </main>
   </div>

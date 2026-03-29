@@ -52,12 +52,12 @@ const SPECIALIZATIONS = [
       </div>
     )}
     <!-- Header -->
-    <div class="bg-[var(--color-primary)] text-white py-10">
+    <div class="bg-[var(--color-primary)] py-8 text-white md:py-10">
       <div class="container">
-        <h1 class="text-3xl font-bold mb-2">Find a Doctor</h1>
+        <h1 class="mb-2 text-3xl font-bold">Find a Doctor</h1>
         <p class="text-blue-100 text-sm">Direct consultations across India — no commission, no middlemen</p>
         <!-- Search bar -->
-        <form method="GET" class="mt-6 flex flex-col sm:flex-row gap-3 max-w-2xl">
+        <form method="GET" class="mt-6 grid max-w-3xl gap-3 md:grid-cols-[minmax(0,1fr)_12rem_auto]">
           <input
             type="text"
             name="name"
@@ -70,7 +70,7 @@ const SPECIALIZATIONS = [
             name="city"
             value={city ?? ""}
             placeholder="City"
-            class="w-full sm:w-36 px-4 py-2.5 rounded-lg bg-white text-slate-900 placeholder:text-slate-500 border border-white/40 shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-white focus:border-white"
+            class="w-full px-4 py-2.5 rounded-lg bg-white text-slate-900 placeholder:text-slate-500 border border-white/40 shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-white focus:border-white"
           />
           <button type="submit" class="px-6 py-2.5 rounded-lg bg-white text-[var(--color-primary)] border border-white/40 shadow-sm font-semibold text-sm hover:bg-blue-50 transition-colors">
             Search
@@ -82,12 +82,13 @@ const SPECIALIZATIONS = [
     <div class="container py-8">
       <div class="flex flex-col lg:flex-row gap-8">
         <!-- Filters sidebar -->
-        <aside class="lg:w-56 shrink-0">
+        <aside class="shrink-0 lg:w-56">
           <form method="GET" id="filter-form">
             <input type="hidden" name="name" value={name ?? ""} />
             <input type="hidden" name="city" value={city ?? ""} />
 
-            <div class="bg-white rounded-xl border border-[var(--color-border)] p-4 mb-4">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+            <div class="bg-white rounded-xl border border-[var(--color-border)] p-4">
               <h2 class="font-semibold text-sm mb-3">Availability</h2>
               <label class="flex items-center gap-2 text-sm cursor-pointer">
                 <input type="checkbox" name="available" value="1" checked={available === true}
@@ -97,7 +98,7 @@ const SPECIALIZATIONS = [
               </label>
             </div>
 
-            <div class="bg-white rounded-xl border border-[var(--color-border)] p-4 mb-4">
+            <div class="bg-white rounded-xl border border-[var(--color-border)] p-4">
               <h2 class="font-semibold text-sm mb-3">Mode</h2>
               {["online", "offline"].map((m) => (
                 <label class="flex items-center gap-2 text-sm cursor-pointer mb-2">
@@ -114,9 +115,9 @@ const SPECIALIZATIONS = [
               )}
             </div>
 
-            <div class="bg-white rounded-xl border border-[var(--color-border)] p-4">
+            <div class="bg-white rounded-xl border border-[var(--color-border)] p-4 sm:col-span-2 lg:col-span-1">
               <h2 class="font-semibold text-sm mb-3">Specialization</h2>
-              <div class="space-y-2">
+              <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
                 {SPECIALIZATIONS.map((s) => (
                   <a
                     href={`/doctors?specialization=${encodeURIComponent(s)}`}
@@ -126,6 +127,7 @@ const SPECIALIZATIONS = [
                   </a>
                 ))}
               </div>
+            </div>
             </div>
           </form>
         </aside>
@@ -154,7 +156,7 @@ const SPECIALIZATIONS = [
               <a href="/doctors" class="text-sm text-[var(--color-primary)] hover:underline">View all doctors</a>
             </div>
           ) : (
-            <div class="grid gap-4 sm:grid-cols-2">
+            <div class="grid gap-4 xl:grid-cols-2">
               {results.map(({ profile, user }) => (
                 <a
                   href={`/doctors/${profile.slug}`}

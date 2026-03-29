@@ -20,9 +20,14 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site ?? "https://medconne
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content={description} />
     <link rel="canonical" href={canonicalUrl} />
+    <meta name="theme-color" content="#1e6fb0" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="MedConnect" />
+    <meta name="mobile-web-app-capable" content="yes" />
 
     <!-- Open Graph -->
     <meta property="og:title" content={title} />
@@ -32,10 +37,19 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site ?? "https://medconne
     <meta name="twitter:card" content="summary_large_image" />
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/app-icon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>{title}</title>
   </head>
   <body>
     <a class="skip-to-content" href="#main-content">Skip to content</a>
     <slot />
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>
