@@ -85,6 +85,36 @@ const statusColors: Record<string, string> = {
     )}
   </div>
 
+  {doctorProfile.deletedAt && (
+    <div class="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
+      <p class="font-semibold text-red-900">Doctor profile removed</p>
+      <p class="mt-1 text-sm text-red-800">
+        Your public doctor profile has been removed by admin.
+        {doctorProfile.deletedReason ? ` Reason: ${doctorProfile.deletedReason}` : ""}
+      </p>
+    </div>
+  )}
+
+  {!doctorProfile.deletedAt && doctorProfile.isSuspended && (
+    <div class="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
+      <p class="font-semibold text-red-900">Doctor profile suspended</p>
+      <p class="mt-1 text-sm text-red-800">
+        Your public doctor profile is hidden while suspended.
+        {doctorProfile.suspensionReason ? ` Reason: ${doctorProfile.suspensionReason}` : ""}
+      </p>
+    </div>
+  )}
+
+  {!doctorProfile.deletedAt && !doctorProfile.isSuspended && doctorProfile.isFlagged && (
+    <div class="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+      <p class="font-semibold text-amber-900">Profile flagged for review</p>
+      <p class="mt-1 text-sm text-amber-800">
+        Admin has flagged your profile for review.
+        {doctorProfile.flagReason ? ` Note: ${doctorProfile.flagReason}` : ""}
+      </p>
+    </div>
+  )}
+
   {doctorProfile && !doctorProfile.isVerified && (
     <div class="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
       <p class="font-semibold text-amber-900">Profile approval pending</p>

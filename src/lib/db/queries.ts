@@ -110,6 +110,16 @@ export type DoctorSearchParams = {
   offset?: number;
 };
 
+export type AdminDoctorFilters = {
+  name?: string;
+  specialization?: string;
+  city?: string;
+  state?: string;
+  consultationMode?: "online" | "offline" | "both";
+  availability?: "all" | "available" | "unavailable";
+  status?: "all" | "active" | "flagged" | "suspended" | "deleted";
+};
+
 export async function searchDoctors(d1: D1Database, params: DoctorSearchParams) {
   const db = getDb(d1);
   const conditions = [];
@@ -140,6 +150,8 @@ export async function searchDoctors(d1: D1Database, params: DoctorSearchParams) 
     );
   }
   conditions.push(eq(doctorProfiles.isVerified, true));
+  conditions.push(sql`${doctorProfiles.deletedAt} IS NULL`);
+  conditions.push(eq(doctorProfiles.isSuspended, false));
 
   const query = db
     .select({
@@ -164,7 +176,14 @@ export async function getDoctorBySlug(d1: D1Database, slug: string) {
     })
     .from(doctorProfiles)
     .innerJoin(users, eq(doctorProfiles.userId, users.id))
-    .where(eq(doctorProfiles.slug, slug))
+    .where(
+      and(
+        eq(doctorProfiles.slug, slug),
+        eq(doctorProfiles.isVerified, true),
+        eq(doctorProfiles.isSuspended, false),
+        sql`${doctorProfiles.deletedAt} IS NULL`
+      )
+    )
     .get();
 }
 
@@ -185,7 +204,13 @@ export async function listApprovedDoctors(d1: D1Database) {
     })
     .from(doctorProfiles)
     .innerJoin(users, eq(doctorProfiles.userId, users.id))
-    .where(eq(doctorProfiles.isVerified, true))
+    .where(
+      and(
+        eq(doctorProfiles.isVerified, true),
+        eq(doctorProfiles.isSuspended, false),
+        sql`${doctorProfiles.deletedAt} IS NULL`
+      )
+    )
     .all();
 }
 
@@ -194,9 +219,68 @@ export async function countVerifiedDoctors(d1: D1Database) {
   const row = await db
     .select({ count: sql<number>`count(*)` })
     .from(doctorProfiles)
-    .where(eq(doctorProfiles.isVerified, true))
+    .where(
+      and(
+        eq(doctorProfiles.isVerified, true),
+        eq(doctorProfiles.isSuspended, false),
+        sql`${doctorProfiles.deletedAt} IS NULL`
+      )
+    )
     .get();
   return row?.count ?? 0;
+}
+
+export async function listAdminManagedDoctors(
+  d1: D1Database,
+  filters: AdminDoctorFilters = {}
+) {
+  const db = getDb(d1);
+  const conditions = [eq(users.role, "doctor"), eq(doctorProfiles.isVerified, true)];
+
+  if (filters.name) conditions.push(like(users.name, `%${filters.name}%`));
+  if (filters.specialization) conditions.push(like(doctorProfiles.specialization, `%${filters.specialization}%`));
+  if (filters.city) conditions.push(like(doctorProfiles.city, `%${filters.city}%`));
+  if (filters.state) conditions.push(eq(doctorProfiles.state, filters.state));
+  if (filters.consultationMode) conditions.push(eq(doctorProfiles.consultationMode, filters.consultationMode));
+  if (filters.availability === "available") conditions.push(eq(doctorProfiles.isAvailable, true));
+  if (filters.availability === "unavailable") conditions.push(eq(doctorProfiles.isAvailable, false));
+
+  switch (filters.status ?? "active") {
+    case "flagged":
+      conditions.push(eq(doctorProfiles.isFlagged, true));
+      conditions.push(sql`${doctorProfiles.deletedAt} IS NULL`);
+      break;
+    case "suspended":
+      conditions.push(eq(doctorProfiles.isSuspended, true));
+      conditions.push(sql`${doctorProfiles.deletedAt} IS NULL`);
+      break;
+    case "deleted":
+      conditions.push(sql`${doctorProfiles.deletedAt} IS NOT NULL`);
+      break;
+    case "all":
+      break;
+    case "active":
+    default:
+      conditions.push(eq(doctorProfiles.isSuspended, false));
+      conditions.push(sql`${doctorProfiles.deletedAt} IS NULL`);
+      break;
+  }
+
+  return db
+    .select({
+      user: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        phone: users.phone,
+      },
+      profile: doctorProfiles,
+    })
+    .from(doctorProfiles)
+    .innerJoin(users, eq(doctorProfiles.userId, users.id))
+    .where(and(...conditions))
+    .orderBy(sql`lower(${users.name}) asc`)
+    .all();
 }
 
 export async function countUsersByRole(

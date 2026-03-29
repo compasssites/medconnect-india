@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { users, doctorProfiles, doctorApprovalRequests } from "../../lib/db/schema";
 import { countVerifiedDoctors, getDoctorProfileByUserId, hasAdminAccount } from "../../lib/db/queries";
@@ -32,6 +32,24 @@ const updateProfileSchema = z.object({
 
 const reviewApprovalSchema = z.object({
   notes: z.string().max(500).optional(),
+});
+
+const adminDoctorUpdateSchema = z.object({
+  name: z.string().min(2).max(100),
+  specialization: z.string().min(2).max(100),
+  qualification: z.string().min(2).max(200),
+  registrationNumber: z.string().min(2).max(50),
+  registrationCouncil: z.string().min(2).max(100),
+  city: z.string().max(100).optional().or(z.literal("")),
+  state: z.string().max(100).optional().or(z.literal("")),
+  consultationFee: z.number().int().min(0).optional(),
+  consultationMode: z.enum(["online", "offline", "both"]).optional(),
+  paymentMode: z.enum(["prepaid", "postpaid", "flexible"]).optional(),
+  isAvailable: z.boolean().optional(),
+});
+
+const adminModerationSchema = z.object({
+  reason: z.string().max(500).optional(),
 });
 
 const optionalPhoneSchema = z
@@ -203,6 +221,36 @@ async function getReviewerContext(c: Context<HonoEnv>) {
   return { db, user };
 }
 
+async function getAdminDoctorContext(c: Context<HonoEnv>) {
+  const user = c.get("user" as never) as App.Locals["user"];
+  if (!user || user.role !== "admin") {
+    return { error: c.json({ error: "Forbidden" }, 403) };
+  }
+
+  const doctorUserId = c.req.param("doctorUserId");
+  const db = drizzle(c.env.DB);
+  const doctor = await db
+    .select({
+      user: {
+        id: users.id,
+        role: users.role,
+        name: users.name,
+        email: users.email,
+      },
+      profile: doctorProfiles,
+    })
+    .from(users)
+    .innerJoin(doctorProfiles, eq(doctorProfiles.userId, users.id))
+    .where(and(eq(users.id, doctorUserId), eq(users.role, "doctor")))
+    .get();
+
+  if (!doctor) {
+    return { error: c.json({ error: "Doctor not found" }, 404) };
+  }
+
+  return { db, admin: user, doctor };
+}
+
 app.post("/approvals/:doctorUserId/approve", async (c) => {
   const reviewer = await getReviewerContext(c);
   if ("error" in reviewer) return reviewer.error;
@@ -290,6 +338,158 @@ app.post("/approvals/:doctorUserId/reject", zValidator("json", reviewApprovalSch
       updatedAt: now,
     })
     .where(eq(doctorProfiles.userId, doctorUserId));
+
+  return c.json({ success: true });
+});
+
+app.put("/admin/:doctorUserId", zValidator("json", adminDoctorUpdateSchema), async (c) => {
+  const context = await getAdminDoctorContext(c);
+  if ("error" in context) return context.error;
+
+  const { db, doctor } = context;
+  const data = c.req.valid("json");
+  const now = Math.floor(Date.now() / 1000);
+  const nextSlug = generateDoctorSlug(data.name, data.specialization, data.city || undefined);
+  const slug = `${nextSlug}-${doctor.user.id.slice(-4).toLowerCase()}`;
+
+  await db.update(users).set({ name: data.name, updatedAt: now }).where(eq(users.id, doctor.user.id));
+  await db
+    .update(doctorProfiles)
+    .set({
+      slug,
+      specialization: data.specialization,
+      qualification: data.qualification,
+      registrationNumber: data.registrationNumber,
+      registrationCouncil: data.registrationCouncil,
+      city: data.city || null,
+      state: data.state || null,
+      consultationFee: data.consultationFee ?? doctor.profile.consultationFee,
+      consultationMode: data.consultationMode ?? doctor.profile.consultationMode,
+      paymentMode: data.paymentMode ?? doctor.profile.paymentMode,
+      isAvailable: data.isAvailable ?? doctor.profile.isAvailable,
+      updatedAt: now,
+    })
+    .where(eq(doctorProfiles.userId, doctor.user.id));
+
+  return c.json({ success: true, slug });
+});
+
+app.post("/admin/:doctorUserId/flag", zValidator("json", adminModerationSchema), async (c) => {
+  const context = await getAdminDoctorContext(c);
+  if ("error" in context) return context.error;
+
+  const { db, doctor } = context;
+  const { reason } = c.req.valid("json");
+  const now = Math.floor(Date.now() / 1000);
+
+  await db
+    .update(doctorProfiles)
+    .set({
+      isFlagged: true,
+      flaggedAt: now,
+      flagReason: reason ?? null,
+      updatedAt: now,
+    })
+    .where(eq(doctorProfiles.userId, doctor.user.id));
+
+  return c.json({ success: true });
+});
+
+app.post("/admin/:doctorUserId/unflag", async (c) => {
+  const context = await getAdminDoctorContext(c);
+  if ("error" in context) return context.error;
+
+  const { db, doctor } = context;
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .update(doctorProfiles)
+    .set({
+      isFlagged: false,
+      flaggedAt: null,
+      flagReason: null,
+      updatedAt: now,
+    })
+    .where(eq(doctorProfiles.userId, doctor.user.id));
+
+  return c.json({ success: true });
+});
+
+app.post("/admin/:doctorUserId/suspend", zValidator("json", adminModerationSchema), async (c) => {
+  const context = await getAdminDoctorContext(c);
+  if ("error" in context) return context.error;
+
+  const { db, doctor } = context;
+  const { reason } = c.req.valid("json");
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .update(doctorProfiles)
+    .set({
+      isSuspended: true,
+      suspendedAt: now,
+      suspensionReason: reason ?? null,
+      isAvailable: false,
+      updatedAt: now,
+    })
+    .where(eq(doctorProfiles.userId, doctor.user.id));
+
+  return c.json({ success: true });
+});
+
+app.post("/admin/:doctorUserId/unsuspend", async (c) => {
+  const context = await getAdminDoctorContext(c);
+  if ("error" in context) return context.error;
+
+  const { db, doctor } = context;
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .update(doctorProfiles)
+    .set({
+      isSuspended: false,
+      suspendedAt: null,
+      suspensionReason: null,
+      updatedAt: now,
+    })
+    .where(eq(doctorProfiles.userId, doctor.user.id));
+
+  return c.json({ success: true });
+});
+
+app.post("/admin/:doctorUserId/delete", zValidator("json", adminModerationSchema), async (c) => {
+  const context = await getAdminDoctorContext(c);
+  if ("error" in context) return context.error;
+
+  const { db, admin, doctor } = context;
+  const { reason } = c.req.valid("json");
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .update(doctorProfiles)
+    .set({
+      deletedAt: now,
+      deletedReason: reason ?? null,
+      deletedByUserId: admin.id,
+      isAvailable: false,
+      updatedAt: now,
+    })
+    .where(eq(doctorProfiles.userId, doctor.user.id));
+
+  return c.json({ success: true });
+});
+
+app.post("/admin/:doctorUserId/restore", async (c) => {
+  const context = await getAdminDoctorContext(c);
+  if ("error" in context) return context.error;
+
+  const { db, doctor } = context;
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .update(doctorProfiles)
+    .set({
+      deletedAt: null,
+      deletedReason: null,
+      deletedByUserId: null,
+      updatedAt: now,
+    })
+    .where(eq(doctorProfiles.userId, doctor.user.id));
 
   return c.json({ success: true });
 });

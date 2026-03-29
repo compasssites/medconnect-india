@@ -56,6 +56,7 @@ app.route("/api/consultation", consultationRoutes);
 app.route("/api/upload", uploadRoutes);
 app.route("/api/patients", patientRoutes);
 app.use("/api/doctors/complete-profile", authMiddleware);
+app.use("/api/doctors/admin/*", authMiddleware);
 app.use("/api/doctors/profile", authMiddleware);
 app.use("/api/doctors/availability", authMiddleware);
 app.use("/api/doctors/approvals/*", authMiddleware);

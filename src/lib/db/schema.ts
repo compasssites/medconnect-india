@@ -78,6 +78,19 @@ export const doctorProfiles = sqliteTable(
       .notNull()
       .default(false),
     verifiedAt: integer("verified_at", { mode: "number" }),
+    isFlagged: integer("is_flagged", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    flaggedAt: integer("flagged_at", { mode: "number" }),
+    flagReason: text("flag_reason"),
+    isSuspended: integer("is_suspended", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    suspendedAt: integer("suspended_at", { mode: "number" }),
+    suspensionReason: text("suspension_reason"),
+    deletedAt: integer("deleted_at", { mode: "number" }),
+    deletedReason: text("deleted_reason"),
+    deletedByUserId: text("deleted_by_user_id").references(() => users.id),
 
     createdAt: integer("created_at", { mode: "number" })
       .notNull()
