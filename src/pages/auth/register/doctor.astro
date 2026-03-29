@@ -3,6 +3,7 @@ import AuthLayout from "../../../layouts/AuthLayout.astro";
 import { getSession, getSessionUser, updateSessionUserId } from "../../../lib/auth/session";
 import { ensureAdminUser, getDoctorProfileByUserId, hasAdminAccount, listApprovedDoctors } from "../../../lib/db/queries";
 import { getTurnstileClientConfig } from "../../../lib/auth/turnstile";
+import { INDIAN_STATES_AND_UTS, MEDICAL_COUNCILS } from "../../../lib/constants/india";
 
 Astro.response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
 Astro.response.headers.set("Pragma", "no-cache");
@@ -156,13 +157,16 @@ const turnstile = getTurnstileClientConfig(env);
             </div>
             <div>
               <label for="reg-council" class="mb-1.5 block text-sm font-medium">Council</label>
-              <input
+              <select
                 id="reg-council"
                 name="registrationCouncil"
-                type="text"
-                placeholder="Maharashtra Medical Council"
-                class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-              />
+                class="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              >
+                <option value="">Select council</option>
+                {MEDICAL_COUNCILS.map((council) => (
+                  <option value={council}>{council}</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -179,13 +183,16 @@ const turnstile = getTurnstileClientConfig(env);
             </div>
             <div>
               <label for="state" class="mb-1.5 block text-sm font-medium">State</label>
-              <input
+              <select
                 id="state"
                 name="state"
-                type="text"
-                placeholder="Maharashtra"
-                class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-              />
+                class="w-full rounded-lg border border-[var(--color-border)] bg-white px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+              >
+                <option value="">Select state</option>
+                {INDIAN_STATES_AND_UTS.map((state) => (
+                  <option value={state}>{state}</option>
+                ))}
+              </select>
             </div>
           </div>
 

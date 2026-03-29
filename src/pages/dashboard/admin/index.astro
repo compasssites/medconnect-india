@@ -16,8 +16,9 @@ if (!currentUser || currentUser.role !== "admin") return Astro.redirect("/auth/l
 const db = drizzle(env.DB);
 const approvalRequests = await getPendingApprovalRequestsForReviewer(env.DB);
 const approvedDoctors = await countVerifiedDoctors(env.DB);
-const userCount = (await db.select({ count: sql<number>`count(*)` }).from(users).get())?.count ?? 0;
 const adminCount = await countUsersByRole(env.DB, "admin");
+const totalUserCount =
+  (await db.select({ count: sql<number>`count(*)` }).from(users).where(sql`${users.role} != 'admin'`).get())?.count ?? 0;
 const patientCount =
   (await db.select({ count: sql<number>`count(*)` }).from(users).where(eq(users.role, "patient")).get())?.count ?? 0;
 const incompleteDoctorCount =
@@ -46,7 +47,7 @@ for (const id of recommenderIds) {
 
   <div class="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
     {[
-      { label: "Total accounts", value: userCount, color: "text-[var(--color-primary)]" },
+      { label: "Total users", value: totalUserCount, color: "text-[var(--color-primary)]" },
       { label: "Admins", value: adminCount, color: "text-slate-700" },
       { label: "Patients", value: patientCount, color: "text-[var(--color-secondary)]" },
       { label: "Approved doctors", value: approvedDoctors, color: "text-blue-700" },

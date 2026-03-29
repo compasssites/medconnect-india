@@ -2,6 +2,7 @@
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
 import { getSessionUser } from "../../../lib/auth/session";
 import { getDoctorProfileByUserId } from "../../../lib/db/queries";
+import { INDIAN_STATES_AND_UTS, MEDICAL_COUNCILS } from "../../../lib/constants/india";
 
 const env = (Astro.locals as App.Locals).runtime?.env;
 const sessionCookie = Astro.cookies.get("session")?.value;
@@ -14,6 +15,14 @@ const profile = await getDoctorProfileByUserId(env.DB, currentUser.id);
 if (!profile) return Astro.redirect("/dashboard/doctor");
 
 const languages: string[] = profile.languages ? JSON.parse(profile.languages) : [];
+const stateOptions = profile.state && !INDIAN_STATES_AND_UTS.includes(profile.state as (typeof INDIAN_STATES_AND_UTS)[number])
+  ? [profile.state, ...INDIAN_STATES_AND_UTS]
+  : INDIAN_STATES_AND_UTS;
+const councilOptions =
+  profile.registrationCouncil &&
+  !MEDICAL_COUNCILS.includes(profile.registrationCouncil as (typeof MEDICAL_COUNCILS)[number])
+    ? [profile.registrationCouncil, ...MEDICAL_COUNCILS]
+    : MEDICAL_COUNCILS;
 ---
 
 <DashboardLayout title="Edit Profile — MedConnect" role="doctor">
@@ -24,7 +33,7 @@ const languages: string[] = profile.languages ? JSON.parse(profile.languages) : 
       <!-- Personal info -->
       <div class="bg-white rounded-2xl border border-[var(--color-border)] p-6 space-y-4">
         <h2 class="font-semibold">Personal Information</h2>
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label class="block text-sm font-medium mb-1.5">Full name</label>
             <input id="name" type="text" value={currentUser.name} required
@@ -42,7 +51,7 @@ const languages: string[] = profile.languages ? JSON.parse(profile.languages) : 
             class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] resize-y"
           >{profile.bio ?? ""}</textarea>
         </div>
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label class="block text-sm font-medium mb-1.5">City</label>
             <input id="city" type="text" value={profile.city ?? ""}
@@ -50,8 +59,30 @@ const languages: string[] = profile.languages ? JSON.parse(profile.languages) : 
           </div>
           <div>
             <label class="block text-sm font-medium mb-1.5">State</label>
-            <input id="state" type="text" value={profile.state ?? ""}
+            <select id="state"
+              class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]">
+              <option value="">Select state</option>
+              {stateOptions.map((state) => (
+                <option value={state} selected={profile.state === state}>{state}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="block text-sm font-medium mb-1.5">Registration number</label>
+            <input id="registration-number" type="text" value={profile.registrationNumber}
               class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1.5">Medical council</label>
+            <select id="registration-council"
+              class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]">
+              <option value="">Select council</option>
+              {councilOptions.map((council) => (
+                <option value={council} selected={profile.registrationCouncil === council}>{council}</option>
+              ))}
+            </select>
           </div>
         </div>
         <div>
@@ -156,7 +187,9 @@ const languages: string[] = profile.languages ? JSON.parse(profile.languages) : 
           experienceYears: parseInt((document.getElementById("experience") as HTMLInputElement).value) || undefined,
           bio: (document.getElementById("bio") as HTMLTextAreaElement).value.trim() || undefined,
           city: (document.getElementById("city") as HTMLInputElement).value.trim() || undefined,
-          state: (document.getElementById("state") as HTMLInputElement).value.trim() || undefined,
+          state: (document.getElementById("state") as HTMLSelectElement).value.trim() || undefined,
+          registrationNumber: (document.getElementById("registration-number") as HTMLInputElement).value.trim() || undefined,
+          registrationCouncil: (document.getElementById("registration-council") as HTMLSelectElement).value.trim() || undefined,
           languages: languages.length > 0 ? languages : undefined,
           clinicName: (document.getElementById("clinic-name") as HTMLInputElement).value.trim() || undefined,
           clinicAddress: (document.getElementById("clinic-address") as HTMLTextAreaElement).value.trim() || undefined,

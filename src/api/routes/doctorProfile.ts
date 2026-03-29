@@ -17,6 +17,8 @@ const updateProfileSchema = z.object({
   bio: z.string().max(1000).optional(),
   city: z.string().max(100).optional(),
   state: z.string().max(100).optional(),
+  registrationNumber: z.string().min(2).max(50).optional(),
+  registrationCouncil: z.string().min(2).max(100).optional(),
   languages: z.array(z.string()).optional(),
   clinicName: z.string().max(200).optional(),
   clinicAddress: z.string().max(500).optional(),
@@ -69,6 +71,8 @@ app.put("/profile", zValidator("json", updateProfileSchema), async (c) => {
   if (data.bio !== undefined) profileUpdate.bio = data.bio;
   if (data.city !== undefined) profileUpdate.city = data.city;
   if (data.state !== undefined) profileUpdate.state = data.state;
+  if (data.registrationNumber !== undefined) profileUpdate.registrationNumber = data.registrationNumber;
+  if (data.registrationCouncil !== undefined) profileUpdate.registrationCouncil = data.registrationCouncil;
   if (data.languages !== undefined) profileUpdate.languages = JSON.stringify(data.languages);
   if (data.clinicName !== undefined) profileUpdate.clinicName = data.clinicName;
   if (data.clinicAddress !== undefined) profileUpdate.clinicAddress = data.clinicAddress;
