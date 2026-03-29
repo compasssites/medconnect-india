@@ -161,6 +161,33 @@ export const doctorApprovalRequests = sqliteTable(
   ]
 );
 
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body"),
+    link: text("link"),
+    entityType: text("entity_type"),
+    entityId: text("entity_id"),
+    isRead: integer("is_read", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    readAt: integer("read_at", { mode: "number" }),
+    createdAt: integer("created_at", { mode: "number" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [
+    index("idx_notifications_user_id").on(t.userId),
+    index("idx_notifications_user_read").on(t.userId, t.isRead),
+  ]
+);
+
 // ─── Consultations ──────────────────────────────────────────────────────────
 
 export const consultations = sqliteTable(
@@ -237,3 +264,5 @@ export type Consultation = typeof consultations.$inferSelect;
 export type NewConsultation = typeof consultations.$inferInsert;
 export type DoctorApprovalRequest = typeof doctorApprovalRequests.$inferSelect;
 export type NewDoctorApprovalRequest = typeof doctorApprovalRequests.$inferInsert;
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;

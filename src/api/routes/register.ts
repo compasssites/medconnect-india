@@ -14,6 +14,7 @@ import {
   getDoctorProfileByUserId,
   hasAdminAccount,
 } from "../../lib/db/queries";
+import { notifyAdmins } from "../../lib/notifications";
 import { passwordSchema } from "../validators/schemas";
 import type { HonoEnv } from "../index";
 
@@ -136,6 +137,15 @@ app.post("/", zValidator("json", registerSchema), async (c) => {
           requestedAt: now,
           createdAt: now,
           updatedAt: now,
+        });
+
+        await notifyAdmins(c.env.DB, {
+          type: "doctor_approval_pending",
+          title: "New doctor approval request",
+          body: `${data.name} submitted a doctor profile for review.`,
+          link: "/dashboard/admin",
+          entityType: "doctor",
+          entityId: userId,
         });
       }
     }

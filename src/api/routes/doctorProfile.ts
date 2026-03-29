@@ -7,6 +7,7 @@ import { users, doctorProfiles, doctorApprovalRequests } from "../../lib/db/sche
 import { countVerifiedDoctors, getDoctorProfileByUserId, hasAdminAccount } from "../../lib/db/queries";
 import { ulid } from "ulid";
 import { generateDoctorSlug } from "../../lib/utils/slug";
+import { createNotification, notifyAdmins } from "../../lib/notifications";
 import type { HonoEnv } from "../index";
 
 const app = new Hono<HonoEnv>();
@@ -189,6 +190,14 @@ app.post("/complete-profile", zValidator("json", completeProfileSchema), async (
         createdAt: now,
         updatedAt: now,
       });
+      await notifyAdmins(c.env.DB, {
+        type: "doctor_approval_pending",
+        title: "Doctor profile ready for review",
+        body: `${data.name} completed doctor registration and is waiting for approval.`,
+        link: "/dashboard/admin",
+        entityType: "doctor",
+        entityId: user.id,
+      });
     }
   } catch (error) {
     await db.delete(doctorApprovalRequests).where(eq(doctorApprovalRequests.doctorUserId, user.id));
@@ -293,6 +302,16 @@ app.post("/approvals/:doctorUserId/approve", async (c) => {
     })
     .where(eq(doctorProfiles.userId, doctorUserId));
 
+  await createNotification(c.env.DB, {
+    userId: doctorUserId,
+    type: "doctor_approved",
+    title: "Doctor profile approved",
+    body: "Your profile is now approved and visible in Find Doctors.",
+    link: "/dashboard/doctor",
+    entityType: "doctor",
+    entityId: doctorUserId,
+  });
+
   return c.json({ success: true });
 });
 
@@ -338,6 +357,16 @@ app.post("/approvals/:doctorUserId/reject", zValidator("json", reviewApprovalSch
       updatedAt: now,
     })
     .where(eq(doctorProfiles.userId, doctorUserId));
+
+  await createNotification(c.env.DB, {
+    userId: doctorUserId,
+    type: "doctor_rejected",
+    title: "Doctor profile needs changes",
+    body: notes ? `Review note: ${notes}` : "Your doctor registration was not approved yet.",
+    link: "/dashboard/doctor",
+    entityType: "doctor",
+    entityId: doctorUserId,
+  });
 
   return c.json({ success: true });
 });
@@ -392,6 +421,16 @@ app.post("/admin/:doctorUserId/flag", zValidator("json", adminModerationSchema),
     })
     .where(eq(doctorProfiles.userId, doctor.user.id));
 
+  await createNotification(c.env.DB, {
+    userId: doctor.user.id,
+    type: "doctor_flagged",
+    title: "Profile flagged for review",
+    body: reason ?? "An admin flagged your profile for review.",
+    link: "/dashboard/doctor",
+    entityType: "doctor",
+    entityId: doctor.user.id,
+  });
+
   return c.json({ success: true });
 });
 
@@ -410,6 +449,16 @@ app.post("/admin/:doctorUserId/unflag", async (c) => {
       updatedAt: now,
     })
     .where(eq(doctorProfiles.userId, doctor.user.id));
+
+  await createNotification(c.env.DB, {
+    userId: doctor.user.id,
+    type: "doctor_flag_cleared",
+    title: "Profile flag removed",
+    body: "The admin review flag has been cleared from your profile.",
+    link: "/dashboard/doctor",
+    entityType: "doctor",
+    entityId: doctor.user.id,
+  });
 
   return c.json({ success: true });
 });
@@ -432,6 +481,16 @@ app.post("/admin/:doctorUserId/suspend", zValidator("json", adminModerationSchem
     })
     .where(eq(doctorProfiles.userId, doctor.user.id));
 
+  await createNotification(c.env.DB, {
+    userId: doctor.user.id,
+    type: "doctor_suspended",
+    title: "Profile suspended",
+    body: reason ?? "Your doctor profile has been suspended by admin.",
+    link: "/dashboard/doctor",
+    entityType: "doctor",
+    entityId: doctor.user.id,
+  });
+
   return c.json({ success: true });
 });
 
@@ -450,6 +509,16 @@ app.post("/admin/:doctorUserId/unsuspend", async (c) => {
       updatedAt: now,
     })
     .where(eq(doctorProfiles.userId, doctor.user.id));
+
+  await createNotification(c.env.DB, {
+    userId: doctor.user.id,
+    type: "doctor_unsuspended",
+    title: "Suspension lifted",
+    body: "Your doctor profile is active again.",
+    link: "/dashboard/doctor",
+    entityType: "doctor",
+    entityId: doctor.user.id,
+  });
 
   return c.json({ success: true });
 });
@@ -472,6 +541,16 @@ app.post("/admin/:doctorUserId/delete", zValidator("json", adminModerationSchema
     })
     .where(eq(doctorProfiles.userId, doctor.user.id));
 
+  await createNotification(c.env.DB, {
+    userId: doctor.user.id,
+    type: "doctor_deleted",
+    title: "Doctor profile removed",
+    body: reason ?? "Your public doctor profile was removed by admin.",
+    link: "/dashboard/doctor",
+    entityType: "doctor",
+    entityId: doctor.user.id,
+  });
+
   return c.json({ success: true });
 });
 
@@ -490,6 +569,16 @@ app.post("/admin/:doctorUserId/restore", async (c) => {
       updatedAt: now,
     })
     .where(eq(doctorProfiles.userId, doctor.user.id));
+
+  await createNotification(c.env.DB, {
+    userId: doctor.user.id,
+    type: "doctor_restored",
+    title: "Doctor profile restored",
+    body: "Your public doctor profile has been restored.",
+    link: "/dashboard/doctor",
+    entityType: "doctor",
+    entityId: doctor.user.id,
+  });
 
   return c.json({ success: true });
 });

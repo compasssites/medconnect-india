@@ -14,6 +14,7 @@ import {
   getConsultationsForPatient,
 } from "../../lib/db/queries";
 import { ulid } from "ulid";
+import { createNotification } from "../../lib/notifications";
 import type { HonoEnv } from "../index";
 
 const app = new Hono<HonoEnv>();
@@ -58,6 +59,16 @@ app.post("/", zValidator("json", createConsultationSchema), async (c) => {
     requestedAt: now,
     createdAt: now,
     updatedAt: now,
+  });
+
+  await createNotification(c.env.DB, {
+    userId: data.doctorId,
+    type: "consultation_requested",
+    title: "New consultation request",
+    body: `${user.name} sent a consultation request: ${data.chiefComplaint}`,
+    link: "/dashboard/doctor",
+    entityType: "consultation",
+    entityId: id,
   });
 
   return c.json({ success: true, consultationId: id }, 201);
@@ -108,6 +119,16 @@ app.post("/:id/accept", zValidator("json", acceptConsultationSchema), async (c) 
     })
     .where(eq(consultations.id, consultation.id));
 
+  await createNotification(c.env.DB, {
+    userId: consultation.patientId,
+    type: "consultation_accepted",
+    title: "Consultation accepted",
+    body: `${user.name} accepted your consultation request.`,
+    link: "/dashboard/patient?tab=active",
+    entityType: "consultation",
+    entityId: consultation.id,
+  });
+
   return c.json({ success: true });
 });
 
@@ -132,6 +153,16 @@ app.post("/:id/reject", zValidator("json", rejectConsultationSchema), async (c) 
     .set({ status: "rejected", doctorNotes: data.doctorNotes, updatedAt: Math.floor(Date.now() / 1000) })
     .where(eq(consultations.id, consultation.id));
 
+  await createNotification(c.env.DB, {
+    userId: consultation.patientId,
+    type: "consultation_rejected",
+    title: "Consultation request declined",
+    body: data.doctorNotes || `${user.name} declined your consultation request.`,
+    link: "/dashboard/patient?tab=history",
+    entityType: "consultation",
+    entityId: consultation.id,
+  });
+
   return c.json({ success: true });
 });
 
@@ -151,6 +182,16 @@ app.post("/:id/start", async (c) => {
     .set({ status: "in_progress", startedAt: now, updatedAt: now })
     .where(eq(consultations.id, consultation.id));
 
+  await createNotification(c.env.DB, {
+    userId: consultation.patientId,
+    type: "consultation_started",
+    title: "Consultation started",
+    body: `${user.name} started your consultation chat.`,
+    link: `/consultation/${consultation.id}`,
+    entityType: "consultation",
+    entityId: consultation.id,
+  });
+
   return c.json({ success: true });
 });
 
@@ -169,6 +210,16 @@ app.post("/:id/complete", async (c) => {
     .update(consultations)
     .set({ status: "completed", completedAt: now, updatedAt: now })
     .where(eq(consultations.id, consultation.id));
+
+  await createNotification(c.env.DB, {
+    userId: consultation.patientId,
+    type: "consultation_completed",
+    title: "Consultation completed",
+    body: `${user.name} marked the consultation as completed.`,
+    link: "/dashboard/patient?tab=history",
+    entityType: "consultation",
+    entityId: consultation.id,
+  });
 
   return c.json({ success: true });
 });

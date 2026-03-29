@@ -1,5 +1,7 @@
 ---
 import BaseLayout from "./BaseLayout.astro";
+import { getSessionUser } from "../lib/auth/session";
+import { countUnreadNotifications, listNotificationsForUser } from "../lib/notifications";
 
 interface Props {
   title?: string;
@@ -26,6 +28,13 @@ const adminNav = [
 ];
 
 const navLinks = role === "doctor" ? doctorNav : role === "admin" ? adminNav : patientNav;
+const env = (Astro.locals as App.Locals).runtime?.env;
+const sessionCookie = Astro.cookies.get("session")?.value;
+const currentUser = env && sessionCookie ? await getSessionUser(env.SESSIONS, env.DB, sessionCookie) : null;
+const initialNotifications =
+  env && currentUser ? await listNotificationsForUser(env.DB, currentUser.id, 8) : [];
+const initialUnreadCount =
+  env && currentUser ? await countUnreadNotifications(env.DB, currentUser.id) : 0;
 ---
 
 <BaseLayout title={title}>
@@ -40,11 +49,85 @@ const navLinks = role === "doctor" ? doctorNav : role === "admin" ? adminNav : p
             </a>
           ))}
         </nav>
-        <form action="/api/auth/logout" method="POST">
-          <button type="submit" class="text-sm text-[var(--color-muted)] hover:text-[var(--color-danger)] transition-colors">
-            Sign out
-          </button>
-        </form>
+        <div class="flex items-center gap-3">
+          {currentUser && (
+            <div class="relative">
+              <button
+                type="button"
+                id="notifications-toggle"
+                class="relative rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] p-2 text-[var(--color-muted)] transition-colors hover:text-[var(--color-text)]"
+                aria-label="Notifications"
+                aria-expanded="false"
+              >
+                <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 17a3 3 0 006 0" />
+                </svg>
+                <span
+                  id="notifications-badge"
+                  class:list={[
+                    "absolute -right-1 -top-1 min-w-[1.1rem] rounded-full bg-[var(--color-danger)] px-1.5 py-0.5 text-center text-[10px] font-semibold leading-none text-white",
+                    initialUnreadCount === 0 && "hidden",
+                  ]}
+                >
+                  {initialUnreadCount}
+                </span>
+              </button>
+
+              <div
+                id="notifications-panel"
+                class="absolute right-0 top-[calc(100%+0.75rem)] hidden w-[min(92vw,24rem)] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-[0_18px_50px_rgba(15,23,42,0.12)]"
+              >
+                <div class="flex items-center justify-between border-b border-[var(--color-border)] px-4 py-3">
+                  <div>
+                    <p class="text-sm font-semibold">Notifications</p>
+                    <p class="text-xs text-[var(--color-muted)]">Live updates while you are signed in</p>
+                  </div>
+                  <button
+                    type="button"
+                    id="notifications-read-all"
+                    class="text-xs font-medium text-[var(--color-primary)] hover:underline"
+                  >
+                    Mark all read
+                  </button>
+                </div>
+                <div id="notifications-empty" class:list={["px-4 py-8 text-center text-sm text-[var(--color-muted)]", initialNotifications.length > 0 && "hidden"]}>
+                  No notifications yet.
+                </div>
+                <div id="notifications-list" class:list={["max-h-[24rem] overflow-y-auto", initialNotifications.length === 0 && "hidden"]}>
+                  {initialNotifications.map((item) => (
+                    <a
+                      href={item.link ?? "#"}
+                      class:list={[
+                        "notification-item block border-b border-[var(--color-border)] px-4 py-3 last:border-b-0 hover:bg-[var(--color-bg)] transition-colors",
+                        item.isRead ? "bg-white" : "bg-blue-50/60",
+                      ]}
+                      data-id={item.id}
+                      data-link={item.link ?? ""}
+                    >
+                      <div class="flex items-start gap-3">
+                        <span class:list={["mt-1 h-2.5 w-2.5 rounded-full", item.isRead ? "bg-slate-300" : "bg-[var(--color-primary)]"]}></span>
+                        <div class="min-w-0">
+                          <p class="text-sm font-semibold text-[var(--color-text)]">{item.title}</p>
+                          {item.body && <p class="mt-1 text-xs leading-5 text-[var(--color-muted)]">{item.body}</p>}
+                          <p class="mt-1 text-[11px] text-[var(--color-muted)]">
+                            {new Date(item.createdAt * 1000).toLocaleString("en-IN")}
+                          </p>
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <form action="/api/auth/logout" method="POST">
+            <button type="submit" class="text-sm text-[var(--color-muted)] hover:text-[var(--color-danger)] transition-colors">
+              Sign out
+            </button>
+          </form>
+        </div>
       </div>
 
       <div class="border-t border-[var(--color-border)] md:hidden">
@@ -68,3 +151,137 @@ const navLinks = role === "doctor" ? doctorNav : role === "admin" ? adminNav : p
     </main>
   </div>
 </BaseLayout>
+
+{currentUser && (
+  <script define:vars={{ initialUnreadCount }}>
+    const toggle = document.getElementById("notifications-toggle");
+    const panel = document.getElementById("notifications-panel");
+    const badge = document.getElementById("notifications-badge");
+    const list = document.getElementById("notifications-list");
+    const empty = document.getElementById("notifications-empty");
+    const readAllButton = document.getElementById("notifications-read-all");
+
+    function setUnreadCount(count) {
+      if (!badge) return;
+      badge.textContent = String(count);
+      badge.classList.toggle("hidden", count === 0);
+    }
+
+    function formatTime(unix) {
+      return new Date(unix * 1000).toLocaleString("en-IN");
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function renderNotifications(items, unreadCount) {
+      setUnreadCount(unreadCount);
+      if (!list || !empty) return;
+
+      if (!items.length) {
+        list.classList.add("hidden");
+        empty.classList.remove("hidden");
+        list.innerHTML = "";
+        return;
+      }
+
+      empty.classList.add("hidden");
+      list.classList.remove("hidden");
+      list.innerHTML = items
+        .map((item) => {
+          const background = item.isRead ? "bg-white" : "bg-blue-50/60";
+          const dot = item.isRead ? "bg-slate-300" : "bg-[var(--color-primary)]";
+          const body = item.body ? `<p class="mt-1 text-xs leading-5 text-[var(--color-muted)]">${escapeHtml(item.body)}</p>` : "";
+          const href = escapeHtml(item.link || "#");
+          return `
+            <a href="${href}" class="notification-item block border-b border-[var(--color-border)] px-4 py-3 last:border-b-0 hover:bg-[var(--color-bg)] transition-colors ${background}" data-id="${escapeHtml(item.id)}" data-link="${escapeHtml(item.link || "")}">
+              <div class="flex items-start gap-3">
+                <span class="mt-1 h-2.5 w-2.5 rounded-full ${dot}"></span>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-[var(--color-text)]">${escapeHtml(item.title)}</p>
+                  ${body}
+                  <p class="mt-1 text-[11px] text-[var(--color-muted)]">${formatTime(item.createdAt)}</p>
+                </div>
+              </div>
+            </a>
+          `;
+        })
+        .join("");
+      attachNotificationItemHandlers();
+    }
+
+    async function fetchNotifications() {
+      const response = await fetch("/api/notifications?limit=8", { headers: { Accept: "application/json" } });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load notifications");
+      renderNotifications(data.notifications || [], data.unreadCount || 0);
+    }
+
+    async function markRead(id) {
+      await fetch(`/api/notifications/${id}/read`, { method: "POST" });
+    }
+
+    function attachNotificationItemHandlers() {
+      document.querySelectorAll(".notification-item").forEach((item) => {
+        item.addEventListener("click", async (event) => {
+          const id = item.dataset.id;
+          const link = item.dataset.link;
+          event.preventDefault();
+          if (id) {
+            await markRead(id);
+          }
+          if (!link) {
+            await fetchNotifications();
+            return;
+          }
+          window.location.href = link;
+        });
+      });
+    }
+
+    if (toggle && panel) {
+      toggle.addEventListener("click", async () => {
+        const isOpen = !panel.classList.contains("hidden");
+        panel.classList.toggle("hidden", isOpen);
+        toggle.setAttribute("aria-expanded", String(!isOpen));
+        if (isOpen) return;
+        try {
+          await fetchNotifications();
+        } catch {}
+      });
+
+      document.addEventListener("click", (event) => {
+        if (!panel.classList.contains("hidden") && !panel.contains(event.target) && !toggle.contains(event.target)) {
+          panel.classList.add("hidden");
+          toggle.setAttribute("aria-expanded", "false");
+        }
+      });
+    }
+
+    if (readAllButton) {
+      readAllButton.addEventListener("click", async () => {
+        await fetch("/api/notifications/read-all", { method: "POST" });
+        await fetchNotifications();
+      });
+    }
+
+    attachNotificationItemHandlers();
+    setUnreadCount(initialUnreadCount);
+
+    if ("EventSource" in window) {
+      const stream = new EventSource("/api/notifications/stream");
+      stream.addEventListener("snapshot", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          renderNotifications(data.notifications || [], data.unreadCount || 0);
+        } catch {}
+      });
+    }
+  </script>
+)}
