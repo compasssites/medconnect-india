@@ -16,7 +16,14 @@ export const passwordSchema = z
   .regex(/[A-Za-z]/, "Include at least one letter")
   .regex(/\d/, "Include at least one number");
 
-const turnstileTokenSchema = z.string().trim().min(1).max(2048).optional();
+const turnstileTokenSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  },
+  z.string().max(2048).optional()
+);
 
 export const sendCodeSchema = z.object({
   email: emailSchema,
