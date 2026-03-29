@@ -292,19 +292,19 @@ const turnstile = getTurnstileClientConfig(env);
 
 {hasPendingRegistration && (
   <script define:vars={{ needsDoctorRecommendation }}>
-    const form = document.getElementById("doctor-form") as HTMLFormElement;
-    const submitBtn = document.getElementById("submit-btn") as HTMLButtonElement;
-    const formError = document.getElementById("form-error") as HTMLParagraphElement;
+    const form = document.getElementById("doctor-form");
+    const submitBtn = document.getElementById("submit-btn");
+    const formError = document.getElementById("form-error");
 
-    function readValue(id: string) {
-      return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement).value.trim();
+    function readValue(id) {
+      return document.getElementById(id).value.trim();
     }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       formError.classList.add("hidden");
 
-      const body: Record<string, string> = {
+      const body = {
         role: "doctor",
         name: readValue("name"),
         phone: readValue("phone"),
@@ -361,10 +361,10 @@ const turnstile = getTurnstileClientConfig(env);
           body: JSON.stringify(body),
         });
 
-        const data = await response.json<{ error?: string; role?: string }>();
+        const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Registration failed");
         window.location.href = `/dashboard/${data.role ?? "doctor"}`;
-      } catch (error: unknown) {
+      } catch (error) {
         formError.textContent = error instanceof Error ? error.message : "Registration failed";
         formError.classList.remove("hidden");
         submitBtn.disabled = false;
@@ -376,33 +376,27 @@ const turnstile = getTurnstileClientConfig(env);
 
 {!hasPendingRegistration && (
   <script define:vars={{ turnstileEnabled: turnstile.enabled, turnstileSiteKey: turnstile.siteKey }}>
-    const stepEmail = document.getElementById("step-email")!;
-    const stepCode = document.getElementById("step-code")!;
-    const emailInput = document.getElementById("email") as HTMLInputElement;
-    const codeInput = document.getElementById("code") as HTMLInputElement;
-    const emailDisplay = document.getElementById("email-display")!;
-    const emailError = document.getElementById("email-error")!;
-    const codeError = document.getElementById("code-error")!;
-    const sendBtn = document.getElementById("send-btn") as HTMLButtonElement;
-    const verifyBtn = document.getElementById("verify-btn") as HTMLButtonElement;
-    const resendBtn = document.getElementById("resend-btn") as HTMLButtonElement;
-    const resendTimer = document.getElementById("resend-timer")!;
-    const changeEmail = document.getElementById("change-email") as HTMLButtonElement;
-    const devCodeBanner = document.getElementById("dev-code-banner")!;
-    const devCodeValue = document.getElementById("dev-code-value")!;
+    const stepEmail = document.getElementById("step-email");
+    const stepCode = document.getElementById("step-code");
+    const emailInput = document.getElementById("email");
+    const codeInput = document.getElementById("code");
+    const emailDisplay = document.getElementById("email-display");
+    const emailError = document.getElementById("email-error");
+    const codeError = document.getElementById("code-error");
+    const sendBtn = document.getElementById("send-btn");
+    const verifyBtn = document.getElementById("verify-btn");
+    const resendBtn = document.getElementById("resend-btn");
+    const resendTimer = document.getElementById("resend-timer");
+    const changeEmail = document.getElementById("change-email");
+    const devCodeBanner = document.getElementById("dev-code-banner");
+    const devCodeValue = document.getElementById("dev-code-value");
 
     let currentEmail = "";
-    let resendCountdown: ReturnType<typeof setInterval> | null = null;
-    let turnstileWidgetId: string | null = null;
+    let resendCountdown = null;
+    let turnstileWidgetId = null;
 
     function getTurnstileApi() {
-      return (window as Window & {
-        turnstile?: {
-          render: (container: string, options: Record<string, unknown>) => string;
-          getResponse: (widgetId: string) => string;
-          reset: (widgetId: string) => void;
-        };
-      }).turnstile;
+      return window.turnstile;
     }
 
     function ensureTurnstileWidget() {
@@ -426,7 +420,7 @@ const turnstile = getTurnstileClientConfig(env);
       getTurnstileApi()?.reset(turnstileWidgetId);
     }
 
-    function showError(target: HTMLElement, message: string) {
+    function showError(target, message) {
       target.textContent = message;
       target.classList.remove("hidden");
     }
@@ -450,7 +444,7 @@ const turnstile = getTurnstileClientConfig(env);
       }, 1000);
     }
 
-    async function sendCode(email: string) {
+    async function sendCode(email) {
       clearError(emailError);
       clearError(codeError);
 
@@ -470,7 +464,7 @@ const turnstile = getTurnstileClientConfig(env);
           body: JSON.stringify({ email, turnstileToken }),
         });
 
-        const data = await response.json<{ error?: string; code?: string }>();
+        const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Failed to send code");
 
         currentEmail = email;
@@ -489,7 +483,7 @@ const turnstile = getTurnstileClientConfig(env);
 
         startResendTimer();
         codeInput.focus();
-      } catch (error: unknown) {
+      } catch (error) {
         showError(emailError, error instanceof Error ? error.message : "Failed to send code");
       } finally {
         sendBtn.disabled = false;
@@ -528,10 +522,10 @@ const turnstile = getTurnstileClientConfig(env);
           body: JSON.stringify({ email: currentEmail, code }),
         });
 
-        const data = await response.json<{ error?: string }>();
+        const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Verification failed");
         window.location.href = "/auth/register/doctor";
-      } catch (error: unknown) {
+      } catch (error) {
         showError(codeError, error instanceof Error ? error.message : "Verification failed");
         verifyBtn.disabled = false;
         verifyBtn.textContent = "Continue";

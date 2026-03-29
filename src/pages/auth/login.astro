@@ -80,21 +80,15 @@ const turnstile = getTurnstileClientConfig(env);
 </AuthLayout>
 
 <script define:vars={{ turnstileEnabled: turnstile.enabled, turnstileSiteKey: turnstile.siteKey }}>
-  const form = document.getElementById("login-form") as HTMLFormElement;
-  const emailInput = document.getElementById("email") as HTMLInputElement;
-  const passwordInput = document.getElementById("password") as HTMLInputElement;
-  const submitBtn = document.getElementById("submit-btn") as HTMLButtonElement;
-  const formError = document.getElementById("form-error") as HTMLParagraphElement;
-  let turnstileWidgetId: string | null = null;
+  const form = document.getElementById("login-form");
+  const emailInput = document.getElementById("email");
+  const passwordInput = document.getElementById("password");
+  const submitBtn = document.getElementById("submit-btn");
+  const formError = document.getElementById("form-error");
+  let turnstileWidgetId = null;
 
   function getTurnstileApi() {
-    return (window as Window & {
-      turnstile?: {
-        render: (container: string, options: Record<string, unknown>) => string;
-        getResponse: (widgetId: string) => string;
-        reset: (widgetId: string) => void;
-      };
-    }).turnstile;
+    return window.turnstile;
   }
 
   function ensureTurnstileWidget() {
@@ -154,10 +148,10 @@ const turnstile = getTurnstileClientConfig(env);
         body: JSON.stringify({ email, password, turnstileToken }),
       });
 
-      const data = await response.json<{ error?: string; user?: { role: string } }>();
+      const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Sign-in failed");
       window.location.href = `/dashboard/${data.user?.role ?? ""}`;
-    } catch (error: unknown) {
+    } catch (error) {
       formError.textContent = error instanceof Error ? error.message : "Sign-in failed";
       formError.classList.remove("hidden");
       submitBtn.disabled = false;
