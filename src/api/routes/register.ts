@@ -7,12 +7,14 @@ import { eq } from "drizzle-orm";
 import { ulid } from "ulid";
 import { users, doctorProfiles, doctorApprovalRequests } from "../../lib/db/schema";
 import { getSession, updateSessionUserId } from "../../lib/auth/session";
+import { hashPassword } from "../../lib/auth/password";
 import { generateDoctorSlug } from "../../lib/utils/slug";
 import {
   countVerifiedDoctors,
   getDoctorProfileByUserId,
   hasAdminAccount,
 } from "../../lib/db/queries";
+import { passwordSchema } from "../validators/schemas";
 import type { HonoEnv } from "../index";
 
 const optionalPhoneSchema = z
@@ -27,11 +29,13 @@ const registerSchema = z.discriminatedUnion("role", [
     role: z.literal("patient"),
     name: z.string().min(2).max(100),
     phone: optionalPhoneSchema,
+    password: passwordSchema,
   }),
   z.object({
     role: z.literal("doctor"),
     name: z.string().min(2).max(100),
     phone: optionalPhoneSchema,
+    password: passwordSchema,
     specialization: z.string().min(2).max(100),
     qualification: z.string().min(2).max(200),
     registrationNumber: z.string().min(2).max(50),
@@ -60,6 +64,7 @@ app.post("/", zValidator("json", registerSchema), async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const userId = ulid();
   const phone = data.phone?.trim() || null;
+  const password = await hashPassword(data.password);
   let isBootstrapDoctor = false;
 
   if (phone) {
@@ -91,6 +96,11 @@ app.post("/", zValidator("json", registerSchema), async (c) => {
     phone,
     name: data.name,
     role: data.role,
+    passwordHash: password.hash,
+    passwordSalt: password.salt,
+    passwordIterations: password.iterations,
+    passwordUpdatedAt: now,
+    emailVerifiedAt: now,
     createdAt: now,
     updatedAt: now,
   });

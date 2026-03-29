@@ -12,6 +12,11 @@ export const users = sqliteTable(
     name: text("name").notNull(),
     role: text("role", { enum: ["doctor", "patient", "admin"] }).notNull(),
     avatarUrl: text("avatar_url"),
+    passwordHash: text("password_hash"),
+    passwordSalt: text("password_salt"),
+    passwordIterations: integer("password_iterations", { mode: "number" }),
+    passwordUpdatedAt: integer("password_updated_at", { mode: "number" }),
+    emailVerifiedAt: integer("email_verified_at", { mode: "number" }),
     createdAt: integer("created_at", { mode: "number" })
       .notNull()
       .default(sql`(unixepoch())`),

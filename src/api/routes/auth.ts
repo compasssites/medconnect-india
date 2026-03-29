@@ -1,19 +1,35 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { deleteCookie, getCookie } from "hono/cookie";
-import { sendOtpSchema, verifyOtpSchema } from "../validators/schemas";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import {
+  loginSchema,
+  resetPasswordSchema,
+  sendCodeSchema,
+  verifyCodeSchema,
+} from "../validators/schemas";
 import { generateOtp, sendOtp } from "../../lib/auth/otp";
+import { hashPassword, verifyPassword } from "../../lib/auth/password";
 import { createSession, destroySession, getSessionUser } from "../../lib/auth/session";
-import { ensureAdminUser, getUserByEmail } from "../../lib/db/queries";
+import { getUserAuthByEmail, getUserByEmail } from "../../lib/db/queries";
+import { users } from "../../lib/db/schema";
 import type { HonoEnv } from "../index";
 
 const app = new Hono<HonoEnv>();
+const CODE_TTL_SECONDS = 60 * 10;
 
 async function hasEmailProviderConfigured(env: HonoEnv["Bindings"]) {
   const maybeGet = async (value: unknown) => {
     if (!value) return undefined;
     if (typeof value === "string") return value;
-    if (typeof value === "object" && value !== null && "get" in value && typeof (value as { get: unknown }).get === "function") {
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "get" in value &&
+      typeof (value as { get: unknown }).get === "function"
+    ) {
       return (value as { get(): Promise<string> }).get();
     }
     return undefined;
@@ -29,54 +45,199 @@ async function hasEmailProviderConfigured(env: HonoEnv["Bindings"]) {
   return Boolean(accessKeyId && secretAccessKey && region && from);
 }
 
-// POST /api/auth/send-otp
-app.post("/send-otp", zValidator("json", sendOtpSchema), async (c) => {
-  const { email } = c.req.valid("json");
-  const normalizedEmail = email.trim().toLowerCase();
+function setSessionCookie(c: Context<HonoEnv>, token: string) {
+  c.header(
+    "Set-Cookie",
+    `session=${encodeURIComponent(token)}; Max-Age=${60 * 60 * 24 * 30}; Path=/; SameSite=Lax; Secure; HttpOnly`
+  );
+}
 
-  const otp = generateOtp();
-  await c.env.SESSIONS.put(`otp:${normalizedEmail}`, otp, { expirationTtl: 600 });
+function getCodeKey(purpose: "register" | "reset-password", email: string) {
+  return `auth-code:${purpose}:${email}`;
+}
 
-  const { devOtp } = await sendOtp(normalizedEmail, otp, c.env);
+async function sendEmailCode(
+  env: HonoEnv["Bindings"],
+  purpose: "register" | "reset-password",
+  email: string
+) {
+  const code = generateOtp();
+  await env.SESSIONS.put(getCodeKey(purpose, email), code, { expirationTtl: CODE_TTL_SECONDS });
+  const { devOtp } = await sendOtp(email, code, env);
+  const hasEmailProvider = await hasEmailProviderConfigured(env);
+  return hasEmailProvider ? {} : { code: devOtp };
+}
 
-  const hasEmailProvider = await hasEmailProviderConfigured(c.env);
-  return c.json({ success: true, ...(hasEmailProvider ? {} : { otp: devOtp }) });
-});
-
-// POST /api/auth/verify-otp
-app.post("/verify-otp", zValidator("json", verifyOtpSchema), async (c) => {
+// POST /api/auth/login
+app.post("/login", zValidator("json", loginSchema), async (c) => {
   try {
-    const { email, otp } = c.req.valid("json");
+    const { email, password } = c.req.valid("json");
     const normalizedEmail = email.trim().toLowerCase();
-    const normalizedOtp = otp.replace(/\D/g, "").slice(0, 6);
+    const user = await getUserAuthByEmail(c.env.DB, normalizedEmail);
 
-    const storedOtp = await c.env.SESSIONS.get(`otp:${normalizedEmail}`);
-    if (!storedOtp || storedOtp !== normalizedOtp) {
-      return c.json({ error: "Invalid or expired code" }, 400);
+    if (!user) {
+      return c.json({ error: "Invalid email or password" }, 400);
     }
-    await c.env.SESSIONS.delete(`otp:${normalizedEmail}`);
 
-    const adminEmail = c.env.ADMIN_EMAIL?.trim().toLowerCase();
-    const user = adminEmail && normalizedEmail === adminEmail
-      ? await ensureAdminUser(c.env.DB, normalizedEmail)
-      : await getUserByEmail(c.env.DB, normalizedEmail);
-    const sessionToken = await createSession(c.env.SESSIONS, user?.id ?? null, normalizedEmail);
+    if (!user.passwordHash || !user.passwordSalt) {
+      return c.json({ error: "Password not set yet. Use Forgot password to create one." }, 400);
+    }
 
-    c.header(
-      "Set-Cookie",
-      `session=${encodeURIComponent(sessionToken)}; Max-Age=${60 * 60 * 24 * 30}; Path=/; SameSite=Lax; Secure; HttpOnly`
+    const isValidPassword = await verifyPassword(
+      password,
+      user.passwordHash,
+      user.passwordSalt,
+      user.passwordIterations ?? undefined
     );
+
+    if (!isValidPassword) {
+      return c.json({ error: "Invalid email or password" }, 400);
+    }
+
+    const sessionToken = await createSession(c.env.SESSIONS, user.id, normalizedEmail);
+    setSessionCookie(c, sessionToken);
 
     return c.json({
       success: true,
-      isNewUser: !user,
-      user: user ?? null,
+      user: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        name: user.name,
+        role: user.role,
+        avatarUrl: user.avatarUrl,
+      },
     });
   } catch (error) {
-    console.error("verify-otp failed", error);
+    console.error("login failed", error);
     return c.json(
       {
         error: error instanceof Error ? `Sign-in failed: ${error.message}` : "Sign-in failed",
+      },
+      500
+    );
+  }
+});
+
+// POST /api/auth/send-registration-code
+app.post("/send-registration-code", zValidator("json", sendCodeSchema), async (c) => {
+  const { email } = c.req.valid("json");
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (normalizedEmail === c.env.ADMIN_EMAIL?.trim().toLowerCase()) {
+    return c.json({ error: "Use sign in or password reset for the admin account" }, 400);
+  }
+
+  const existingUser = await getUserByEmail(c.env.DB, normalizedEmail);
+  if (existingUser) {
+    return c.json({ error: "An account already exists for this email. Sign in instead." }, 400);
+  }
+
+  const payload = await sendEmailCode(c.env, "register", normalizedEmail);
+  return c.json({ success: true, ...payload });
+});
+
+// POST /api/auth/verify-registration-code
+app.post("/verify-registration-code", zValidator("json", verifyCodeSchema), async (c) => {
+  try {
+    const { email, code } = c.req.valid("json");
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const storedCode = await c.env.SESSIONS.get(getCodeKey("register", normalizedEmail));
+    if (!storedCode || storedCode !== code) {
+      return c.json({ error: "Invalid or expired code" }, 400);
+    }
+
+    const existingUser = await getUserByEmail(c.env.DB, normalizedEmail);
+    if (existingUser) {
+      await c.env.SESSIONS.delete(getCodeKey("register", normalizedEmail));
+      return c.json({ error: "An account already exists for this email. Sign in instead." }, 400);
+    }
+
+    await c.env.SESSIONS.delete(getCodeKey("register", normalizedEmail));
+    const sessionToken = await createSession(c.env.SESSIONS, null, normalizedEmail);
+    setSessionCookie(c, sessionToken);
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("verify-registration-code failed", error);
+    return c.json(
+      {
+        error: error instanceof Error ? `Verification failed: ${error.message}` : "Verification failed",
+      },
+      500
+    );
+  }
+});
+
+// POST /api/auth/send-reset-code
+app.post("/send-reset-code", zValidator("json", sendCodeSchema), async (c) => {
+  const { email } = c.req.valid("json");
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await getUserByEmail(c.env.DB, normalizedEmail);
+
+  if (!user) {
+    return c.json({ error: "No account found for this email" }, 404);
+  }
+
+  const payload = await sendEmailCode(c.env, "reset-password", normalizedEmail);
+  return c.json({ success: true, ...payload });
+});
+
+// POST /api/auth/reset-password
+app.post("/reset-password", zValidator("json", resetPasswordSchema), async (c) => {
+  try {
+    const { email, code, password } = c.req.valid("json");
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const storedCode = await c.env.SESSIONS.get(getCodeKey("reset-password", normalizedEmail));
+    if (!storedCode || storedCode !== code) {
+      return c.json({ error: "Invalid or expired code" }, 400);
+    }
+
+    const user = await getUserByEmail(c.env.DB, normalizedEmail);
+    if (!user) {
+      await c.env.SESSIONS.delete(getCodeKey("reset-password", normalizedEmail));
+      return c.json({ error: "No account found for this email" }, 404);
+    }
+
+    const passwordData = await hashPassword(password);
+    const now = Math.floor(Date.now() / 1000);
+    const db = drizzle(c.env.DB);
+
+    await db
+      .update(users)
+      .set({
+        passwordHash: passwordData.hash,
+        passwordSalt: passwordData.salt,
+        passwordIterations: passwordData.iterations,
+        passwordUpdatedAt: now,
+        emailVerifiedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(users.id, user.id));
+
+    await c.env.SESSIONS.delete(getCodeKey("reset-password", normalizedEmail));
+
+    const sessionToken = await createSession(c.env.SESSIONS, user.id, normalizedEmail);
+    setSessionCookie(c, sessionToken);
+
+    return c.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        name: user.name,
+        role: user.role,
+        avatarUrl: user.avatarUrl,
+      },
+    });
+  } catch (error) {
+    console.error("reset-password failed", error);
+    return c.json(
+      {
+        error: error instanceof Error ? `Reset failed: ${error.message}` : "Reset failed",
       },
       500
     );

@@ -2,16 +2,38 @@ import { z } from "zod";
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
-export const sendOtpSchema = z.object({
-  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
+const emailSchema = z.string().trim().toLowerCase().email("Enter a valid email address");
+
+const codeSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.replace(/\D/g, "").slice(0, 6) : value),
+  z.string().length(6).regex(/^\d{6}$/, "Code must be 6 digits")
+);
+
+export const passwordSchema = z
+  .string()
+  .min(8, "Use at least 8 characters")
+  .max(72, "Use 72 characters or fewer")
+  .regex(/[A-Za-z]/, "Include at least one letter")
+  .regex(/\d/, "Include at least one number");
+
+export const sendCodeSchema = z.object({
+  email: emailSchema,
 });
 
-export const verifyOtpSchema = z.object({
-  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
-  otp: z.preprocess(
-    (value) => (typeof value === "string" ? value.replace(/\D/g, "").slice(0, 6) : value),
-    z.string().length(6).regex(/^\d{6}$/, "OTP must be 6 digits")
-  ),
+export const verifyCodeSchema = z.object({
+  email: emailSchema,
+  code: codeSchema,
+});
+
+export const loginSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+});
+
+export const resetPasswordSchema = z.object({
+  email: emailSchema,
+  code: codeSchema,
+  password: passwordSchema,
 });
 
 // ─── Doctor Profile ──────────────────────────────────────────────────────────

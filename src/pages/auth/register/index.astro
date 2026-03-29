@@ -3,25 +3,27 @@ import AuthLayout from "../../../layouts/AuthLayout.astro";
 import { getSession, getSessionUser, updateSessionUserId } from "../../../lib/auth/session";
 import { ensureAdminUser, hasAdminAccount, listApprovedDoctors } from "../../../lib/db/queries";
 
-const session = Astro.cookies.get("session");
-if (!session?.value) return Astro.redirect("/auth/login");
+Astro.response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+Astro.response.headers.set("Pragma", "no-cache");
+Astro.response.headers.set("Expires", "0");
 
 const env = (Astro.locals as App.Locals).runtime?.env;
 if (!env) return Astro.redirect("/auth/login");
 
-const sessionData = await getSession(env.SESSIONS, session.value);
-if (!sessionData) return Astro.redirect("/auth/login");
+const sessionCookie = Astro.cookies.get("session")?.value;
+const sessionData = sessionCookie ? await getSession(env.SESSIONS, sessionCookie) : null;
+const hasPendingRegistration = Boolean(sessionData && !sessionData.userId);
 
-if (sessionData.userId) {
-  const existingUser = await getSessionUser(env.SESSIONS, env.DB, session.value);
+if (sessionData?.userId && sessionCookie) {
+  const existingUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
   if (existingUser?.role) return Astro.redirect(`/dashboard/${existingUser.role}`);
 }
 
 const adminEmail = env.ADMIN_EMAIL?.trim().toLowerCase();
-if (!sessionData.userId && adminEmail && sessionData.email === adminEmail) {
+if (hasPendingRegistration && sessionCookie && adminEmail && sessionData?.email === adminEmail) {
   const adminUser = await ensureAdminUser(env.DB, sessionData.email);
   if (adminUser) {
-    await updateSessionUserId(env.SESSIONS, session.value, adminUser.id);
+    await updateSessionUserId(env.SESSIONS, sessionCookie, adminUser.id);
     return Astro.redirect("/dashboard/admin");
   }
 }
@@ -30,50 +32,293 @@ const approvedDoctors = await listApprovedDoctors(env.DB);
 const adminExists = await hasAdminAccount(env.DB);
 ---
 
-<AuthLayout title="Choose your account — MedConnect">
-  <div class="rounded-2xl border border-[var(--color-border)] bg-white p-8 shadow-sm">
-    <h1 class="mb-1 text-2xl font-bold">Create your account</h1>
-    <p class="mb-2 text-sm text-[var(--color-muted)]">Signed in as {sessionData.email}</p>
-    <p class="mb-8 text-sm text-[var(--color-muted)]">Choose the registration flow that matches how you’ll use MedConnect.</p>
+<AuthLayout title="Create your account — MedConnect">
+  {hasPendingRegistration && sessionData ? (
+    <div class="rounded-2xl border border-[var(--color-border)] bg-white p-8 shadow-sm">
+      <h1 class="mb-1 text-2xl font-bold">Create your account</h1>
+      <p class="mb-2 text-sm text-[var(--color-muted)]">Email verified for {sessionData.email}</p>
+      <p class="mb-8 text-sm text-[var(--color-muted)]">Choose the registration flow that matches how you’ll use MedConnect.</p>
 
-    <div class="space-y-4">
-      <a
-        href="/auth/register/patient"
-        class="block rounded-2xl border border-[var(--color-border)] px-5 py-5 transition-colors hover:border-[var(--color-primary)] hover:bg-blue-50"
-      >
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="text-base font-semibold">Register as a patient</p>
-            <p class="mt-1 text-sm text-[var(--color-muted)]">Set up a patient account to find doctors and request consultations.</p>
+      <div class="space-y-4">
+        <a
+          href="/auth/register/patient"
+          class="block rounded-2xl border border-[var(--color-border)] px-5 py-5 transition-colors hover:border-[var(--color-primary)] hover:bg-blue-50"
+        >
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-base font-semibold">Register as a patient</p>
+              <p class="mt-1 text-sm text-[var(--color-muted)]">Set up a patient account to find doctors and request consultations.</p>
+            </div>
+            <span class="shrink-0 rounded-full bg-[var(--color-bg)] px-3 py-1 text-xs font-semibold text-[var(--color-primary)]">
+              Patient
+            </span>
           </div>
-          <span class="shrink-0 rounded-full bg-[var(--color-bg)] px-3 py-1 text-xs font-semibold text-[var(--color-primary)]">
-            Patient
-          </span>
-        </div>
-      </a>
+        </a>
 
-      <a
-        href="/auth/register/doctor"
-        class="block rounded-2xl border border-[var(--color-border)] px-5 py-5 transition-colors hover:border-[var(--color-secondary)] hover:bg-emerald-50"
-      >
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="text-base font-semibold">Register as a doctor</p>
-            <p class="mt-1 text-sm text-[var(--color-muted)]">Share your qualifications, medical registration details, and consultation profile.</p>
+        <a
+          href="/auth/register/doctor"
+          class="block rounded-2xl border border-[var(--color-border)] px-5 py-5 transition-colors hover:border-[var(--color-secondary)] hover:bg-emerald-50"
+        >
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-base font-semibold">Register as a doctor</p>
+              <p class="mt-1 text-sm text-[var(--color-muted)]">Share your qualifications, medical registration details, and consultation profile.</p>
+            </div>
+            <span class="shrink-0 rounded-full bg-[var(--color-bg)] px-3 py-1 text-xs font-semibold text-[var(--color-secondary)]">
+              Doctor
+            </span>
           </div>
-          <span class="shrink-0 rounded-full bg-[var(--color-bg)] px-3 py-1 text-xs font-semibold text-[var(--color-secondary)]">
-            Doctor
-          </span>
-        </div>
-      </a>
-    </div>
+        </a>
+      </div>
 
-    <div class="mt-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 text-xs text-[var(--color-muted)]">
-      {approvedDoctors.length > 0
-        ? "Doctor registrations need approval from an existing approved doctor before they become public."
-        : adminExists
-          ? "Doctor registrations will go to the admin dashboard for review until approved doctors are available."
-          : "The first doctor account will be approved directly so the network can get started."}
+      <div class="mt-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 text-xs text-[var(--color-muted)]">
+        {approvedDoctors.length > 0
+          ? "Doctor registrations need approval from an existing approved doctor before they become public."
+          : adminExists
+            ? "Doctor registrations will go to the admin dashboard for review until approved doctors are available."
+            : "The first doctor account will be approved directly so the network can get started."}
+      </div>
     </div>
-  </div>
+  ) : (
+    <div class="rounded-2xl border border-[var(--color-border)] bg-white p-8 shadow-sm">
+      <a href="/auth/login" class="mb-5 inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:underline">← Back to sign in</a>
+      <h1 class="mb-1 text-2xl font-bold">Create your account</h1>
+      <p class="mb-8 text-sm text-[var(--color-muted)]">Verify your email once, then finish the patient or doctor setup with a password.</p>
+
+      <div id="step-email">
+        <div class="mb-4">
+          <label for="email" class="mb-1.5 block text-sm font-medium">Email address</label>
+          <input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
+            autocomplete="email"
+            class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          />
+        </div>
+        <p id="email-error" class="mb-3 hidden text-xs text-[var(--color-danger)]"></p>
+        <button
+          type="button"
+          id="send-btn"
+          class="w-full rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-dark)] disabled:opacity-60"
+        >
+          Email code
+        </button>
+      </div>
+
+      <div id="step-code" class="hidden">
+        <p class="mb-3 text-sm text-[var(--color-muted)]">
+          Enter the code sent to <span id="email-display" class="font-medium text-[var(--color-text)]"></span>.
+          <button id="change-email" class="ml-1 text-[var(--color-primary)] underline">Change</button>
+        </p>
+
+        <div id="dev-code-banner" class="mb-4 hidden rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p class="mb-0.5 text-xs font-medium text-amber-700">Email sending not configured — your code:</p>
+          <p id="dev-code-value" class="text-2xl font-mono font-bold tracking-widest text-amber-900"></p>
+        </div>
+
+        <div class="mb-4">
+          <label for="code" class="mb-1.5 block text-sm font-medium">6-digit code</label>
+          <input
+            id="code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="12"
+            placeholder="123456"
+            class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-mono tracking-[0.4em] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+          />
+        </div>
+
+        <p id="code-error" class="mb-3 hidden text-xs text-[var(--color-danger)]"></p>
+
+        <button
+          type="button"
+          id="verify-btn"
+          class="w-full rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-dark)] disabled:opacity-60"
+        >
+          Continue
+        </button>
+
+        <button
+          type="button"
+          id="resend-btn"
+          class="mt-2 w-full py-2 text-sm text-[var(--color-primary)] hover:underline disabled:opacity-50"
+          disabled
+        >
+          Resend code <span id="resend-timer">(30s)</span>
+        </button>
+      </div>
+    </div>
+  )}
 </AuthLayout>
+
+{!hasPendingRegistration && (
+  <script>
+    const stepEmail = document.getElementById("step-email")!;
+    const stepCode = document.getElementById("step-code")!;
+    const emailInput = document.getElementById("email") as HTMLInputElement;
+    const codeInput = document.getElementById("code") as HTMLInputElement;
+    const emailDisplay = document.getElementById("email-display")!;
+    const emailError = document.getElementById("email-error")!;
+    const codeError = document.getElementById("code-error")!;
+    const sendBtn = document.getElementById("send-btn") as HTMLButtonElement;
+    const verifyBtn = document.getElementById("verify-btn") as HTMLButtonElement;
+    const resendBtn = document.getElementById("resend-btn") as HTMLButtonElement;
+    const resendTimer = document.getElementById("resend-timer")!;
+    const changeEmail = document.getElementById("change-email") as HTMLButtonElement;
+    const devCodeBanner = document.getElementById("dev-code-banner")!;
+    const devCodeValue = document.getElementById("dev-code-value")!;
+
+    let currentEmail = "";
+    let resendCountdown: ReturnType<typeof setInterval> | null = null;
+
+    function showError(target: HTMLElement, message: string) {
+      target.textContent = message;
+      target.classList.remove("hidden");
+    }
+
+    function clearError(target: HTMLElement) {
+      target.classList.add("hidden");
+    }
+
+    function startResendTimer() {
+      let seconds = 30;
+      resendBtn.disabled = true;
+      resendTimer.textContent = `(${seconds}s)`;
+      resendCountdown = setInterval(() => {
+        seconds -= 1;
+        resendTimer.textContent = `(${seconds}s)`;
+        if (seconds <= 0) {
+          clearInterval(resendCountdown!);
+          resendBtn.disabled = false;
+          resendTimer.textContent = "";
+        }
+      }, 1000);
+    }
+
+    async function sendCode(email: string) {
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending…";
+      clearError(emailError);
+
+      try {
+        const response = await fetch("/api/auth/send-registration-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+
+        const data = await response.json<{ error?: string; code?: string }>();
+        if (!response.ok) throw new Error(data.error ?? "Failed to send code");
+
+        currentEmail = email;
+        emailDisplay.textContent = email;
+        stepEmail.classList.add("hidden");
+        stepCode.classList.remove("hidden");
+
+        if (data.code) {
+          devCodeValue.textContent = data.code;
+          devCodeBanner.classList.remove("hidden");
+          codeInput.value = data.code;
+        } else {
+          devCodeBanner.classList.add("hidden");
+        }
+
+        startResendTimer();
+        codeInput.focus();
+      } catch (error: unknown) {
+        showError(emailError, error instanceof Error ? error.message : "Failed to send code");
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Email code";
+      }
+    }
+
+    async function handleSendCode() {
+      const email = emailInput.value.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        showError(emailError, "Enter a valid email address");
+        return;
+      }
+
+      await sendCode(email);
+    }
+
+    async function handleVerifyCode() {
+      clearError(codeError);
+      const code = codeInput.value.replace(/\D/g, "").slice(0, 6);
+      codeInput.value = code;
+
+      if (!/^\d{6}$/.test(code)) {
+        showError(codeError, "Enter the 6-digit code");
+        return;
+      }
+
+      verifyBtn.disabled = true;
+      verifyBtn.textContent = "Verifying…";
+
+      try {
+        const response = await fetch("/api/auth/verify-registration-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: currentEmail, code }),
+        });
+
+        const data = await response.json<{ error?: string }>();
+        if (!response.ok) throw new Error(data.error ?? "Verification failed");
+        window.location.href = "/auth/register";
+      } catch (error: unknown) {
+        showError(codeError, error instanceof Error ? error.message : "Verification failed");
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = "Continue";
+      }
+    }
+
+    sendBtn.addEventListener("click", () => {
+      void handleSendCode();
+    });
+
+    verifyBtn.addEventListener("click", () => {
+      void handleVerifyCode();
+    });
+
+    resendBtn.addEventListener("click", () => {
+      void sendCode(currentEmail);
+    });
+
+    emailInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void handleSendCode();
+      }
+    });
+
+    codeInput.addEventListener("input", () => {
+      const digits = codeInput.value.replace(/\D/g, "").slice(0, 6);
+      if (digits !== codeInput.value) codeInput.value = digits;
+    });
+
+    codeInput.addEventListener("paste", (event) => {
+      event.preventDefault();
+      const pasted = event.clipboardData?.getData("text") ?? "";
+      codeInput.value = pasted.replace(/\D/g, "").slice(0, 6);
+    });
+
+    codeInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void handleVerifyCode();
+      }
+    });
+
+    changeEmail.addEventListener("click", () => {
+      stepCode.classList.add("hidden");
+      stepEmail.classList.remove("hidden");
+      clearError(codeError);
+      if (resendCountdown) clearInterval(resendCountdown);
+      codeInput.value = "";
+      emailInput.focus();
+    });
+  </script>
+)}

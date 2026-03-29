@@ -4,13 +4,13 @@ import { getSession, getSessionUser, updateSessionUserId } from "../../../lib/au
 import { ensureAdminUser, hasAdminAccount, listApprovedDoctors } from "../../../lib/db/queries";
 
 const session = Astro.cookies.get("session");
-if (!session?.value) return Astro.redirect("/auth/login");
+if (!session?.value) return Astro.redirect("/auth/register");
 
 const env = (Astro.locals as App.Locals).runtime?.env;
 if (!env) return Astro.redirect("/auth/login");
 
 const sessionData = await getSession(env.SESSIONS, session.value);
-if (!sessionData) return Astro.redirect("/auth/login");
+if (!sessionData) return Astro.redirect("/auth/register");
 
 if (sessionData.userId) {
   const existingUser = await getSessionUser(env.SESSIONS, env.DB, session.value);
@@ -96,6 +96,29 @@ const needsDoctorRecommendation = approvedDoctors.length > 0;
           name="qualification"
           type="text"
           placeholder="MBBS, MD"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label for="password" class="mb-1.5 block text-sm font-medium">Password</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Use at least 8 characters"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label for="confirm-password" class="mb-1.5 block text-sm font-medium">Confirm password</label>
+        <input
+          id="confirm-password"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Re-enter your password"
           class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         />
       </div>
@@ -197,6 +220,7 @@ const needsDoctorRecommendation = approvedDoctors.length > 0;
       phone: readValue("phone"),
       specialization: readValue("specialization"),
       qualification: readValue("qualification"),
+      password: readValue("password"),
       registrationNumber: readValue("reg-number"),
       registrationCouncil: readValue("reg-council"),
       city: readValue("city"),
@@ -215,6 +239,18 @@ const needsDoctorRecommendation = approvedDoctors.length > 0;
 
     if (!body.specialization || !body.qualification || !body.registrationNumber || !body.registrationCouncil) {
       formError.textContent = "Please fill all required doctor details";
+      formError.classList.remove("hidden");
+      return;
+    }
+
+    if (body.password.length < 8 || !/[A-Za-z]/.test(body.password) || !/\d/.test(body.password)) {
+      formError.textContent = "Use at least 8 characters with letters and numbers";
+      formError.classList.remove("hidden");
+      return;
+    }
+
+    if (body.password !== readValue("confirm-password")) {
+      formError.textContent = "Passwords do not match";
       formError.classList.remove("hidden");
       return;
     }

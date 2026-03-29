@@ -15,16 +15,43 @@ export function getDb(d1: D1Database) {
   return drizzle(d1);
 }
 
+const safeUserColumns = {
+  id: users.id,
+  email: users.email,
+  phone: users.phone,
+  name: users.name,
+  role: users.role,
+  avatarUrl: users.avatarUrl,
+  createdAt: users.createdAt,
+  updatedAt: users.updatedAt,
+};
+
 // ─── User queries ────────────────────────────────────────────────────────────
 
 export async function getUserByEmail(d1: D1Database, email: string) {
   const db = getDb(d1);
-  return db.select().from(users).where(eq(users.email, email)).get();
+  return db.select(safeUserColumns).from(users).where(eq(users.email, email)).get();
 }
 
 export async function getUserById(d1: D1Database, id: string) {
   const db = getDb(d1);
-  return db.select().from(users).where(eq(users.id, id)).get();
+  return db.select(safeUserColumns).from(users).where(eq(users.id, id)).get();
+}
+
+export async function getUserAuthByEmail(d1: D1Database, email: string) {
+  const db = getDb(d1);
+  return db
+    .select({
+      ...safeUserColumns,
+      passwordHash: users.passwordHash,
+      passwordSalt: users.passwordSalt,
+      passwordIterations: users.passwordIterations,
+      passwordUpdatedAt: users.passwordUpdatedAt,
+      emailVerifiedAt: users.emailVerifiedAt,
+    })
+    .from(users)
+    .where(eq(users.email, email))
+    .get();
 }
 
 export async function ensureAdminUser(d1: D1Database, email: string) {
@@ -39,9 +66,9 @@ export async function ensureAdminUser(d1: D1Database, email: string) {
       await db.delete(doctorProfiles).where(eq(doctorProfiles.userId, existing.id));
       await db.delete(patientProfiles).where(eq(patientProfiles.userId, existing.id));
       await db.delete(doctorApprovalRequests).where(eq(doctorApprovalRequests.doctorUserId, existing.id));
-      return db.select().from(users).where(eq(users.id, existing.id)).get();
+      return db.select(safeUserColumns).from(users).where(eq(users.id, existing.id)).get();
     }
-    return existing;
+    return db.select(safeUserColumns).from(users).where(eq(users.id, existing.id)).get();
   }
 
   const adminId = crypto.randomUUID();
@@ -55,7 +82,7 @@ export async function ensureAdminUser(d1: D1Database, email: string) {
     updatedAt: now,
   });
 
-  return db.select().from(users).where(eq(users.id, adminId)).get();
+  return db.select(safeUserColumns).from(users).where(eq(users.id, adminId)).get();
 }
 
 export async function hasAdminAccount(d1: D1Database) {

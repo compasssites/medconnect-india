@@ -67,16 +67,16 @@ export async function sendOtp(
       Content: {
         Simple: {
           Subject: {
-            Data: "Your MedConnect sign-in code",
+            Data: "Your MedConnect verification code",
             Charset: "UTF-8",
           },
           Body: {
             Text: {
-              Data: `Your MedConnect sign-in code is ${otp}. It expires in 10 minutes.`,
+              Data: `Your MedConnect verification code is ${otp}. It expires in 10 minutes.`,
               Charset: "UTF-8",
             },
             Html: {
-              Data: `<html><body style="font-family:Arial,sans-serif;color:#0f172a"><p>Your MedConnect sign-in code is:</p><p style="font-size:28px;font-weight:700;letter-spacing:0.24em;margin:16px 0">${otp}</p><p>This code expires in 10 minutes.</p></body></html>`,
+              Data: `<html><body style="font-family:Arial,sans-serif;color:#0f172a"><p>Your MedConnect verification code is:</p><p style="font-size:28px;font-weight:700;letter-spacing:0.24em;margin:16px 0">${otp}</p><p>This code expires in 10 minutes.</p></body></html>`,
               Charset: "UTF-8",
             },
           },

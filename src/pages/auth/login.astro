@@ -1,255 +1,115 @@
 ---
 import AuthLayout from "../../layouts/AuthLayout.astro";
+import { getSessionUser } from "../../lib/auth/session";
 
 Astro.response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
 Astro.response.headers.set("Pragma", "no-cache");
 Astro.response.headers.set("Expires", "0");
 
-// Redirect if already logged in
-const session = Astro.cookies.get("session");
-if (session?.value) {
-  const res = await fetch(`${Astro.url.origin}/api/auth/me`, {
-    headers: { cookie: `session=${session.value}` },
-  });
-  const data = await res.json<{ user: { role: string } | null }>();
-  if (data.user) {
-    return Astro.redirect(`/dashboard/${data.user.role}`);
+const env = (Astro.locals as App.Locals).runtime?.env;
+const sessionCookie = Astro.cookies.get("session")?.value;
+
+if (env && sessionCookie) {
+  const user = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
+  if (user?.role) {
+    return Astro.redirect(`/dashboard/${user.role}`);
   }
 }
 ---
 
 <AuthLayout title="Sign in — MedConnect">
-  <div class="bg-white rounded-2xl border border-[var(--color-border)] shadow-sm p-8">
-    <h1 class="text-2xl font-bold mb-1">Welcome back</h1>
-    <p class="text-[var(--color-muted)] text-sm mb-8">Enter your email address to continue</p>
+  <div class="rounded-2xl border border-[var(--color-border)] bg-white p-8 shadow-sm">
+    <h1 class="mb-1 text-2xl font-bold">Welcome back</h1>
+    <p class="mb-8 text-sm text-[var(--color-muted)]">Sign in with your email and password.</p>
 
-    <!-- Step 1: Email input -->
-    <div id="step-email">
+    <form id="login-form" novalidate>
       <div class="mb-4">
-        <label for="email" class="block text-sm font-medium mb-1.5">Email address</label>
+        <label for="email" class="mb-1.5 block text-sm font-medium">Email address</label>
         <input
           id="email"
           type="email"
           placeholder="you@example.com"
           autocomplete="email"
-          class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         />
-        <p id="email-error" class="text-xs text-[var(--color-danger)] mt-1 hidden"></p>
       </div>
-      <button
-        type="button"
-        id="send-btn"
-        class="w-full py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-60"
-      >
-        Email code
-      </button>
-    </div>
 
-    <!-- Step 2: Code input (hidden initially) -->
-    <div id="step-otp" class="hidden">
-      <p class="text-sm text-[var(--color-muted)] mb-3">
-        Enter the code for <span id="otp-email-display" class="font-medium text-[var(--color-text)]"></span>.
-        <button id="change-email" class="text-[var(--color-primary)] underline ml-1">Change</button>
-      </p>
-      <!-- Dev/MVP: shows OTP inline when email is not configured -->
-      <div id="dev-otp-banner" class="hidden mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-        <p class="text-xs text-amber-700 font-medium mb-0.5">Email sending not configured — your code:</p>
-        <p id="dev-otp-value" class="text-2xl font-mono font-bold tracking-widest text-amber-900"></p>
-      </div>
-      <div class="mb-4">
-        <label for="otp" class="block text-sm font-medium mb-1.5">Enter 6-digit code</label>
+      <div class="mb-3">
+        <div class="mb-1.5 flex items-center justify-between gap-3">
+          <label for="password" class="block text-sm font-medium">Password</label>
+          <a href="/auth/forgot-password" class="text-xs text-[var(--color-primary)] hover:underline">Forgot password?</a>
+        </div>
         <input
-          id="otp"
-          type="text"
-          inputmode="numeric"
-          maxlength="12"
-          placeholder="342962"
-          autocomplete="one-time-code"
-          class="w-full px-3 py-2 rounded-lg border border-[var(--color-border)] text-sm tracking-[0.4em] font-mono focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent"
+          id="password"
+          type="password"
+          placeholder="Enter your password"
+          autocomplete="current-password"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
         />
-        <p id="otp-error" class="text-xs text-[var(--color-danger)] mt-1 hidden"></p>
       </div>
-      <button
-        type="button"
-        id="verify-btn"
-        class="w-full py-2.5 rounded-lg bg-[var(--color-primary)] text-white font-semibold text-sm hover:bg-[var(--color-primary-dark)] transition-colors disabled:opacity-60"
-      >
-        Continue
-      </button>
-      <button
-        type="button"
-        id="resend-btn"
-        class="w-full mt-2 py-2 text-sm text-[var(--color-primary)] hover:underline disabled:opacity-50"
-        disabled
-      >
-        Resend code <span id="resend-timer">(30s)</span>
-      </button>
-    </div>
 
-    <p class="text-xs text-[var(--color-muted)] text-center mt-6">
-      New here? You'll be set up after verifying.
-    </p>
+      <p id="form-error" class="mb-3 hidden text-xs text-[var(--color-danger)]"></p>
+
+      <button
+        type="submit"
+        id="submit-btn"
+        class="w-full rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-dark)] disabled:opacity-60"
+      >
+        Sign in
+      </button>
+    </form>
+
+    <div class="mt-6 space-y-2 text-center text-xs text-[var(--color-muted)]">
+      <p>New here? <a href="/auth/register" class="text-[var(--color-primary)] hover:underline">Create your account</a></p>
+      <p>Already had a code-only account? Use <a href="/auth/forgot-password" class="text-[var(--color-primary)] hover:underline">Forgot password</a> once to set your password.</p>
+    </div>
   </div>
 </AuthLayout>
 
 <script>
-  const stepEmail = document.getElementById("step-email")!;
-  const stepOtp = document.getElementById("step-otp")!;
+  const form = document.getElementById("login-form") as HTMLFormElement;
   const emailInput = document.getElementById("email") as HTMLInputElement;
-  const otpInput = document.getElementById("otp") as HTMLInputElement;
-  const emailError = document.getElementById("email-error")!;
-  const otpError = document.getElementById("otp-error")!;
-  const otpEmailDisplay = document.getElementById("otp-email-display")!;
-  const sendBtn = document.getElementById("send-btn") as HTMLButtonElement;
-  const verifyBtn = document.getElementById("verify-btn") as HTMLButtonElement;
-  const resendBtn = document.getElementById("resend-btn") as HTMLButtonElement;
-  const resendTimer = document.getElementById("resend-timer")!;
-  const changeEmail = document.getElementById("change-email")!;
-  const devOtpBanner = document.getElementById("dev-otp-banner")!;
-  const devOtpValue = document.getElementById("dev-otp-value")!;
+  const passwordInput = document.getElementById("password") as HTMLInputElement;
+  const submitBtn = document.getElementById("submit-btn") as HTMLButtonElement;
+  const formError = document.getElementById("form-error") as HTMLParagraphElement;
 
-  let currentEmail = "";
-  let resendCountdown: ReturnType<typeof setInterval> | null = null;
-
-  function showError(el: HTMLElement, msg: string) {
-    el.textContent = msg;
-    el.classList.remove("hidden");
-  }
-  function clearError(el: HTMLElement) {
-    el.classList.add("hidden");
-  }
-
-  function startResendTimer() {
-    let secs = 30;
-    resendBtn.disabled = true;
-    resendTimer.textContent = `(${secs}s)`;
-    resendCountdown = setInterval(() => {
-      secs--;
-      resendTimer.textContent = `(${secs}s)`;
-      if (secs <= 0) {
-        clearInterval(resendCountdown!);
-        resendBtn.disabled = false;
-        resendTimer.textContent = "";
-      }
-    }, 1000);
-  }
-
-  async function sendCode(email: string) {
-    sendBtn.disabled = true;
-    sendBtn.textContent = "Sending…";
-    clearError(emailError);
-    try {
-      const res = await fetch("/api/auth/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json<{ error?: string; otp?: string }>();
-      if (!res.ok) throw new Error(data.error ?? "Failed to send code");
-
-      currentEmail = email;
-      otpEmailDisplay.textContent = email;
-      stepEmail.classList.add("hidden");
-      stepOtp.classList.remove("hidden");
-
-      // Dev fallback: show the code inline when email is not configured
-      if (data.otp) {
-        devOtpValue.textContent = data.otp;
-        devOtpBanner.classList.remove("hidden");
-        otpInput.value = data.otp; // auto-fill for convenience
-      } else {
-        devOtpBanner.classList.add("hidden");
-      }
-
-      otpInput.focus();
-      startResendTimer();
-    } catch (e: unknown) {
-      showError(emailError, e instanceof Error ? e.message : "Failed to send code");
-    } finally {
-      sendBtn.disabled = false;
-      sendBtn.textContent = "Email code";
-    }
-  }
-
-  async function handleSendCode() {
-    const email = emailInput.value.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      showError(emailError, "Enter a valid email address");
-      return;
-    }
-    await sendCode(email);
-  }
-
-  async function handleVerifyCode() {
-    const otp = otpInput.value.replace(/\D/g, "").slice(0, 6);
-    otpInput.value = otp;
-    if (!/^\d{6}$/.test(otp)) {
-      showError(otpError, "Enter the 6-digit code");
-      return;
-    }
-    verifyBtn.disabled = true;
-    verifyBtn.textContent = "Verifying…";
-    clearError(otpError);
-    try {
-      const res = await fetch("/api/auth/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: currentEmail, otp }),
-      });
-      const data = await res.json<{
-        isNewUser?: boolean;
-        user?: { role: string } | null;
-        error?: string;
-      }>();
-      if (!res.ok) throw new Error(data.error ?? "Verification failed");
-
-      if (data.isNewUser || !data.user) {
-        window.location.href = "/auth/register";
-      } else {
-        window.location.href = `/dashboard/${data.user.role}`;
-      }
-    } catch (e: unknown) {
-      showError(otpError, e instanceof Error ? e.message : "Verification failed");
-      verifyBtn.disabled = false;
-      verifyBtn.textContent = "Continue";
-    }
-  }
-
-  sendBtn.addEventListener("click", handleSendCode);
-  verifyBtn.addEventListener("click", handleVerifyCode);
-  resendBtn.addEventListener("click", () => sendCode(currentEmail));
-
-  emailInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      void handleSendCode();
-    }
-  });
-
-  otpInput.addEventListener("input", () => {
-    const digits = otpInput.value.replace(/\D/g, "").slice(0, 6);
-    if (otpInput.value !== digits) otpInput.value = digits;
-  });
-
-  otpInput.addEventListener("paste", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const pasted = event.clipboardData?.getData("text") ?? "";
-    otpInput.value = pasted.replace(/\D/g, "").slice(0, 6);
-  });
+    formError.classList.add("hidden");
 
-  otpInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      void handleVerifyCode();
+    const email = emailInput.value.trim().toLowerCase();
+    const password = passwordInput.value;
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      formError.textContent = "Enter a valid email address";
+      formError.classList.remove("hidden");
+      return;
     }
-  });
 
-  changeEmail.addEventListener("click", () => {
-    stepOtp.classList.add("hidden");
-    stepEmail.classList.remove("hidden");
-    if (resendCountdown) clearInterval(resendCountdown);
-    otpInput.value = "";
-    clearError(otpError);
-    emailInput.focus();
+    if (password.length < 8) {
+      formError.textContent = "Enter your password";
+      formError.classList.remove("hidden");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Signing in…";
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json<{ error?: string; user?: { role: string } }>();
+      if (!response.ok) throw new Error(data.error ?? "Sign-in failed");
+      window.location.href = `/dashboard/${data.user?.role ?? ""}`;
+    } catch (error: unknown) {
+      formError.textContent = error instanceof Error ? error.message : "Sign-in failed";
+      formError.classList.remove("hidden");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Sign in";
+    }
   });
 </script>

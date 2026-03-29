@@ -4,13 +4,13 @@ import { getSession, getSessionUser, updateSessionUserId } from "../../../lib/au
 import { ensureAdminUser } from "../../../lib/db/queries";
 
 const session = Astro.cookies.get("session");
-if (!session?.value) return Astro.redirect("/auth/login");
+if (!session?.value) return Astro.redirect("/auth/register");
 
 const env = (Astro.locals as App.Locals).runtime?.env;
 if (!env) return Astro.redirect("/auth/login");
 
 const sessionData = await getSession(env.SESSIONS, session.value);
-if (!sessionData) return Astro.redirect("/auth/login");
+if (!sessionData) return Astro.redirect("/auth/register");
 
 if (sessionData.userId) {
   const existingUser = await getSessionUser(env.SESSIONS, env.DB, session.value);
@@ -60,6 +60,29 @@ if (!sessionData.userId && adminEmail && sessionData.email === adminEmail) {
         />
       </div>
 
+      <div class="mb-4">
+        <label for="password" class="mb-1.5 block text-sm font-medium">Password</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Use at least 8 characters"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label for="confirm-password" class="mb-1.5 block text-sm font-medium">Confirm password</label>
+        <input
+          id="confirm-password"
+          type="password"
+          autocomplete="new-password"
+          placeholder="Re-enter your password"
+          class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+        />
+      </div>
+
       <p id="form-error" class="mb-3 hidden text-xs text-[var(--color-danger)]"></p>
 
       <button
@@ -79,6 +102,8 @@ if (!sessionData.userId && adminEmail && sessionData.email === adminEmail) {
   const formError = document.getElementById("form-error") as HTMLParagraphElement;
   const nameInput = document.getElementById("name") as HTMLInputElement;
   const phoneInput = document.getElementById("phone") as HTMLInputElement;
+  const passwordInput = document.getElementById("password") as HTMLInputElement;
+  const confirmPasswordInput = document.getElementById("confirm-password") as HTMLInputElement;
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -87,6 +112,18 @@ if (!sessionData.userId && adminEmail && sessionData.email === adminEmail) {
     const name = nameInput.value.trim();
     if (name.length < 2) {
       formError.textContent = "Please enter your full name";
+      formError.classList.remove("hidden");
+      return;
+    }
+
+    if (passwordInput.value.length < 8 || !/[A-Za-z]/.test(passwordInput.value) || !/\d/.test(passwordInput.value)) {
+      formError.textContent = "Use at least 8 characters with letters and numbers";
+      formError.classList.remove("hidden");
+      return;
+    }
+
+    if (passwordInput.value !== confirmPasswordInput.value) {
+      formError.textContent = "Passwords do not match";
       formError.classList.remove("hidden");
       return;
     }
@@ -102,6 +139,7 @@ if (!sessionData.userId && adminEmail && sessionData.email === adminEmail) {
           role: "patient",
           name,
           phone: phoneInput.value.trim(),
+          password: passwordInput.value,
         }),
       });
 
