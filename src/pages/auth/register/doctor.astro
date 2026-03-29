@@ -1,7 +1,7 @@
 ---
 import AuthLayout from "../../../layouts/AuthLayout.astro";
 import { getSession, getSessionUser, updateSessionUserId } from "../../../lib/auth/session";
-import { ensureAdminUser, hasAdminAccount, listApprovedDoctors } from "../../../lib/db/queries";
+import { ensureAdminUser, getDoctorProfileByUserId, hasAdminAccount, listApprovedDoctors } from "../../../lib/db/queries";
 import { getTurnstileClientConfig } from "../../../lib/auth/turnstile";
 
 Astro.response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -13,11 +13,12 @@ if (!env) return Astro.redirect("/auth/login");
 
 const sessionCookie = Astro.cookies.get("session")?.value;
 const sessionData = sessionCookie ? await getSession(env.SESSIONS, sessionCookie) : null;
+const existingUser = sessionData?.userId && sessionCookie ? await getSessionUser(env.SESSIONS, env.DB, sessionCookie) : null;
+const existingDoctorProfile =
+  existingUser?.role === "doctor" ? await getDoctorProfileByUserId(env.DB, existingUser.id) : null;
+const resumeDoctorSetup = Boolean(existingUser?.role === "doctor" && !existingDoctorProfile);
 
-if (sessionData?.userId && sessionCookie) {
-  const existingUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
-  if (existingUser?.role) return Astro.redirect(`/dashboard/${existingUser.role}`);
-}
+if (existingUser?.role && !resumeDoctorSetup) return Astro.redirect("/dashboard");
 
 const adminEmail = env.ADMIN_EMAIL?.trim().toLowerCase();
 if (sessionData && !sessionData.userId && sessionCookie && adminEmail && sessionData.email === adminEmail) {
@@ -32,6 +33,8 @@ const approvedDoctors = await listApprovedDoctors(env.DB);
 const adminExists = await hasAdminAccount(env.DB);
 const needsDoctorRecommendation = approvedDoctors.length > 0;
 const hasPendingRegistration = Boolean(sessionData && !sessionData.userId);
+const canFinishDoctorSetup = hasPendingRegistration || resumeDoctorSetup;
+const setupEmail = resumeDoctorSetup ? existingUser?.email : sessionData?.email;
 const turnstile = getTurnstileClientConfig(env);
 ---
 
@@ -40,9 +43,13 @@ const turnstile = getTurnstileClientConfig(env);
     <a href="/auth/register" class="mb-5 inline-flex items-center gap-1 text-sm text-[var(--color-primary)] hover:underline">← Back</a>
     <h1 class="mb-1 text-2xl font-bold">Doctor registration</h1>
 
-    {hasPendingRegistration && sessionData ? (
+    {canFinishDoctorSetup && setupEmail ? (
       <>
-        <p class="mb-6 text-sm text-[var(--color-muted)]">Set up your doctor account for {sessionData.email}.</p>
+        <p class="mb-6 text-sm text-[var(--color-muted)]">
+          {resumeDoctorSetup
+            ? `Finish your doctor profile for ${setupEmail}. Your account will only appear publicly after approval.`
+            : `Set up your doctor account for ${setupEmail}.`}
+        </p>
 
         {needsDoctorRecommendation ? (
           <div class="mb-6 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800">
@@ -68,6 +75,7 @@ const turnstile = getTurnstileClientConfig(env);
               placeholder="Dr. Priya Sharma"
               autocomplete="name"
               required
+              value={resumeDoctorSetup ? existingUser?.name ?? "" : ""}
               class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
             />
           </div>
@@ -81,6 +89,7 @@ const turnstile = getTurnstileClientConfig(env);
               inputmode="numeric"
               placeholder="+91 98765 43210"
               autocomplete="tel"
+              value={resumeDoctorSetup ? existingUser?.phone ?? "" : ""}
               class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
             />
           </div>
@@ -107,28 +116,32 @@ const turnstile = getTurnstileClientConfig(env);
             />
           </div>
 
-          <div class="mb-4">
-            <label for="password" class="mb-1.5 block text-sm font-medium">Password</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autocomplete="new-password"
-              placeholder="Use at least 8 characters"
-              class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-            />
-          </div>
+          {!resumeDoctorSetup && (
+            <>
+              <div class="mb-4">
+                <label for="password" class="mb-1.5 block text-sm font-medium">Password</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="Use at least 8 characters"
+                  class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                />
+              </div>
 
-          <div class="mb-4">
-            <label for="confirm-password" class="mb-1.5 block text-sm font-medium">Confirm password</label>
-            <input
-              id="confirm-password"
-              type="password"
-              autocomplete="new-password"
-              placeholder="Re-enter your password"
-              class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-            />
-          </div>
+              <div class="mb-4">
+                <label for="confirm-password" class="mb-1.5 block text-sm font-medium">Confirm password</label>
+                <input
+                  id="confirm-password"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="Re-enter your password"
+                  class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                />
+              </div>
+            </>
+          )}
 
           <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
@@ -202,7 +215,7 @@ const turnstile = getTurnstileClientConfig(env);
             id="submit-btn"
             class="w-full rounded-lg bg-[var(--color-primary)] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-dark)] disabled:opacity-60"
           >
-            Create doctor account
+            {resumeDoctorSetup ? "Complete doctor profile" : "Create doctor account"}
           </button>
         </form>
       </>
@@ -290,8 +303,8 @@ const turnstile = getTurnstileClientConfig(env);
   </div>
 </AuthLayout>
 
-{hasPendingRegistration && (
-  <script define:vars={{ needsDoctorRecommendation }}>
+{canFinishDoctorSetup && (
+  <script define:vars={{ needsDoctorRecommendation, resumeDoctorSetup }}>
     const form = document.getElementById("doctor-form");
     const submitBtn = document.getElementById("submit-btn");
     const formError = document.getElementById("form-error");
@@ -305,17 +318,20 @@ const turnstile = getTurnstileClientConfig(env);
       formError.classList.add("hidden");
 
       const body = {
-        role: "doctor",
         name: readValue("name"),
         phone: readValue("phone"),
         specialization: readValue("specialization"),
         qualification: readValue("qualification"),
-        password: readValue("password"),
         registrationNumber: readValue("reg-number"),
         registrationCouncil: readValue("reg-council"),
         city: readValue("city"),
         state: readValue("state"),
       };
+
+      if (!resumeDoctorSetup) {
+        body.role = "doctor";
+        body.password = readValue("password");
+      }
 
       if (needsDoctorRecommendation) {
         body.recommendedByUserId = readValue("recommended-by");
@@ -333,16 +349,18 @@ const turnstile = getTurnstileClientConfig(env);
         return;
       }
 
-      if (body.password.length < 8 || !/[A-Za-z]/.test(body.password) || !/\d/.test(body.password)) {
-        formError.textContent = "Use at least 8 characters with letters and numbers";
-        formError.classList.remove("hidden");
-        return;
-      }
+      if (!resumeDoctorSetup) {
+        if (body.password.length < 8 || !/[A-Za-z]/.test(body.password) || !/\d/.test(body.password)) {
+          formError.textContent = "Use at least 8 characters with letters and numbers";
+          formError.classList.remove("hidden");
+          return;
+        }
 
-      if (body.password !== readValue("confirm-password")) {
-        formError.textContent = "Passwords do not match";
-        formError.classList.remove("hidden");
-        return;
+        if (body.password !== readValue("confirm-password")) {
+          formError.textContent = "Passwords do not match";
+          formError.classList.remove("hidden");
+          return;
+        }
       }
 
       if (needsDoctorRecommendation && !body.recommendedByUserId) {
@@ -351,11 +369,13 @@ const turnstile = getTurnstileClientConfig(env);
         return;
       }
 
+      const defaultButtonText = resumeDoctorSetup ? "Complete doctor profile" : "Create doctor account";
       submitBtn.disabled = true;
-      submitBtn.textContent = "Creating account…";
+      submitBtn.textContent = resumeDoctorSetup ? "Saving profile…" : "Creating account…";
 
       try {
-        const response = await fetch("/api/auth/register", {
+        const endpoint = resumeDoctorSetup ? "/api/doctors/complete-profile" : "/api/auth/register";
+        const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -363,18 +383,18 @@ const turnstile = getTurnstileClientConfig(env);
 
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Registration failed");
-        window.location.href = `/dashboard/${data.role ?? "doctor"}`;
+        window.location.href = "/dashboard";
       } catch (error) {
         formError.textContent = error instanceof Error ? error.message : "Registration failed";
         formError.classList.remove("hidden");
         submitBtn.disabled = false;
-        submitBtn.textContent = "Create doctor account";
+        submitBtn.textContent = defaultButtonText;
       }
     });
   </script>
 )}
 
-{!hasPendingRegistration && (
+{!canFinishDoctorSetup && (
   <script define:vars={{ turnstileEnabled: turnstile.enabled, turnstileSiteKey: turnstile.siteKey }}>
     const stepEmail = document.getElementById("step-email");
     const stepCode = document.getElementById("step-code");

@@ -126,6 +126,14 @@ export async function searchDoctors(d1: D1Database, params: DoctorSearchParams) 
   if (params.state) {
     conditions.push(like(doctorProfiles.state, `%${params.state}%`));
   }
+  if (params.name) {
+    conditions.push(
+      or(
+        like(users.name, `%${params.name}%`),
+        like(doctorProfiles.specialization, `%${params.name}%`)
+      )!
+    );
+  }
   if (params.consultationMode && params.consultationMode !== "both") {
     conditions.push(
       sql`(${doctorProfiles.consultationMode} = ${params.consultationMode} OR ${doctorProfiles.consultationMode} = 'both')`
@@ -187,6 +195,19 @@ export async function countVerifiedDoctors(d1: D1Database) {
     .select({ count: sql<number>`count(*)` })
     .from(doctorProfiles)
     .where(eq(doctorProfiles.isVerified, true))
+    .get();
+  return row?.count ?? 0;
+}
+
+export async function countUsersByRole(
+  d1: D1Database,
+  role: User["role"]
+) {
+  const db = getDb(d1);
+  const row = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(users)
+    .where(eq(users.role, role))
     .get();
   return row?.count ?? 0;
 }

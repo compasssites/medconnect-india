@@ -19,6 +19,7 @@ const currentUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
 if (!currentUser || currentUser.role !== "doctor") return Astro.redirect("/auth/login");
 
 const doctorProfile = await getDoctorProfileByUserId(env.DB, currentUser.id);
+if (!doctorProfile) return Astro.redirect("/auth/register/doctor?resume=1");
 
 const tab = Astro.url.searchParams.get("tab") ?? "requests";
 const allConsultations = await getConsultationsForDoctor(env.DB, currentUser.id);

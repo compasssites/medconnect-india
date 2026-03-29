@@ -63,79 +63,93 @@ app.post("/", zValidator("json", registerSchema), async (c) => {
   const db = drizzle(c.env.DB);
   const now = Math.floor(Date.now() / 1000);
   const userId = ulid();
-  const phone = data.phone?.trim() || null;
-  const password = await hashPassword(data.password);
   let isBootstrapDoctor = false;
 
-  if (phone) {
-    const existingPhone = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone)).get();
-    if (existingPhone) return c.json({ error: "That mobile number is already linked to another account" }, 400);
-  }
+  try {
+    const phone = data.phone?.trim() || null;
+    const password = await hashPassword(data.password);
 
-  if (data.role === "doctor") {
-    const verifiedDoctorCount = await countVerifiedDoctors(c.env.DB);
-    const adminExists = await hasAdminAccount(c.env.DB);
-    isBootstrapDoctor = verifiedDoctorCount === 0 && !adminExists;
-    const needsDoctorRecommendation = verifiedDoctorCount > 0;
+    if (phone) {
+      const existingPhone = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone)).get();
+      if (existingPhone) return c.json({ error: "That mobile number is already linked to another account" }, 400);
+    }
 
-    if (needsDoctorRecommendation) {
-      if (!data.recommendedByUserId) {
-        return c.json({ error: "Please choose an existing doctor for approval" }, 400);
-      }
+    if (data.role === "doctor") {
+      const verifiedDoctorCount = await countVerifiedDoctors(c.env.DB);
+      const adminExists = await hasAdminAccount(c.env.DB);
+      isBootstrapDoctor = verifiedDoctorCount === 0 && !adminExists;
+      const needsDoctorRecommendation = verifiedDoctorCount > 0;
 
-      const recommendedByProfile = await getDoctorProfileByUserId(c.env.DB, data.recommendedByUserId);
-      if (!recommendedByProfile || !recommendedByProfile.isVerified) {
-        return c.json({ error: "Selected doctor cannot review new registrations right now" }, 400);
+      if (needsDoctorRecommendation) {
+        if (!data.recommendedByUserId) {
+          return c.json({ error: "Please choose an existing doctor for approval" }, 400);
+        }
+
+        const recommendedByProfile = await getDoctorProfileByUserId(c.env.DB, data.recommendedByUserId);
+        if (!recommendedByProfile || !recommendedByProfile.isVerified) {
+          return c.json({ error: "Selected doctor cannot review new registrations right now" }, 400);
+        }
       }
     }
-  }
 
-  await db.insert(users).values({
-    id: userId,
-    email: session.email,
-    phone,
-    name: data.name,
-    role: data.role,
-    passwordHash: password.hash,
-    passwordSalt: password.salt,
-    passwordIterations: password.iterations,
-    passwordUpdatedAt: now,
-    emailVerifiedAt: now,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  if (data.role === "doctor") {
-    const baseSlug = generateDoctorSlug(data.name, data.specialization, data.city);
-    const slug = `${baseSlug}-${userId.slice(-4).toLowerCase()}`;
-
-    await db.insert(doctorProfiles).values({
-      id: ulid(),
-      userId,
-      slug,
-      specialization: data.specialization,
-      qualification: data.qualification,
-      registrationNumber: data.registrationNumber,
-      registrationCouncil: data.registrationCouncil,
-      city: data.city ?? null,
-      state: data.state ?? null,
-      isVerified: isBootstrapDoctor,
-      verifiedAt: isBootstrapDoctor ? now : null,
+    await db.insert(users).values({
+      id: userId,
+      email: session.email,
+      phone,
+      name: data.name,
+      role: data.role,
+      passwordHash: password.hash,
+      passwordSalt: password.salt,
+      passwordIterations: password.iterations,
+      passwordUpdatedAt: now,
+      emailVerifiedAt: now,
       createdAt: now,
       updatedAt: now,
     });
 
-    if (!isBootstrapDoctor) {
-      await db.insert(doctorApprovalRequests).values({
+    if (data.role === "doctor") {
+      const baseSlug = generateDoctorSlug(data.name, data.specialization, data.city);
+      const slug = `${baseSlug}-${userId.slice(-4).toLowerCase()}`;
+
+      await db.insert(doctorProfiles).values({
         id: ulid(),
-        doctorUserId: userId,
-        recommendedByUserId: data.recommendedByUserId || null,
-        status: "pending",
-        requestedAt: now,
+        userId,
+        slug,
+        specialization: data.specialization,
+        qualification: data.qualification,
+        registrationNumber: data.registrationNumber,
+        registrationCouncil: data.registrationCouncil,
+        city: data.city ?? null,
+        state: data.state ?? null,
+        isVerified: isBootstrapDoctor,
+        verifiedAt: isBootstrapDoctor ? now : null,
         createdAt: now,
         updatedAt: now,
       });
+
+      if (!isBootstrapDoctor) {
+        await db.insert(doctorApprovalRequests).values({
+          id: ulid(),
+          doctorUserId: userId,
+          recommendedByUserId: data.recommendedByUserId || null,
+          status: "pending",
+          requestedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
     }
+  } catch (error) {
+    if (data.role === "doctor") {
+      await db.delete(doctorApprovalRequests).where(eq(doctorApprovalRequests.doctorUserId, userId));
+      await db.delete(doctorProfiles).where(eq(doctorProfiles.userId, userId));
+      await db.delete(users).where(eq(users.id, userId));
+    }
+    console.error("registration failed", error);
+    return c.json(
+      { error: error instanceof Error ? error.message : "Registration failed" },
+      500
+    );
   }
 
   await updateSessionUserId(c.env.SESSIONS, token, userId);

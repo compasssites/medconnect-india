@@ -1,7 +1,7 @@
 ---
 import AuthLayout from "../../../layouts/AuthLayout.astro";
 import { getSession, getSessionUser, updateSessionUserId } from "../../../lib/auth/session";
-import { ensureAdminUser, hasAdminAccount, listApprovedDoctors } from "../../../lib/db/queries";
+import { ensureAdminUser, getDoctorProfileByUserId, hasAdminAccount, listApprovedDoctors } from "../../../lib/db/queries";
 
 Astro.response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
 Astro.response.headers.set("Pragma", "no-cache");
@@ -16,7 +16,11 @@ const hasPendingRegistration = Boolean(sessionData && !sessionData.userId);
 
 if (sessionData?.userId && sessionCookie) {
   const existingUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
-  if (existingUser?.role) return Astro.redirect(`/dashboard/${existingUser.role}`);
+  if (existingUser?.role === "doctor") {
+    const existingDoctorProfile = await getDoctorProfileByUserId(env.DB, existingUser.id);
+    if (!existingDoctorProfile) return Astro.redirect("/auth/register/doctor?resume=1");
+  }
+  if (existingUser?.role) return Astro.redirect("/dashboard");
 }
 
 const adminEmail = env.ADMIN_EMAIL?.trim().toLowerCase();

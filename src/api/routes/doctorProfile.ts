@@ -4,6 +4,9 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { users, doctorProfiles, doctorApprovalRequests } from "../../lib/db/schema";
+import { countVerifiedDoctors, getDoctorProfileByUserId, hasAdminAccount } from "../../lib/db/queries";
+import { ulid } from "ulid";
+import { generateDoctorSlug } from "../../lib/utils/slug";
 import type { HonoEnv } from "../index";
 
 const app = new Hono<HonoEnv>();
@@ -27,6 +30,25 @@ const updateProfileSchema = z.object({
 
 const reviewApprovalSchema = z.object({
   notes: z.string().max(500).optional(),
+});
+
+const optionalPhoneSchema = z
+  .string()
+  .trim()
+  .regex(/^\+91[6-9]\d{9}$/, "Enter a valid Indian mobile number")
+  .optional()
+  .or(z.literal(""));
+
+const completeProfileSchema = z.object({
+  name: z.string().min(2).max(100),
+  phone: optionalPhoneSchema,
+  specialization: z.string().min(2).max(100),
+  qualification: z.string().min(2).max(200),
+  registrationNumber: z.string().min(2).max(50),
+  registrationCouncil: z.string().min(2).max(100),
+  city: z.string().max(100).optional(),
+  state: z.string().max(100).optional(),
+  recommendedByUserId: z.string().min(1).optional(),
 });
 
 // PUT /api/doctors/profile
@@ -75,6 +97,87 @@ app.put("/availability", async (c) => {
     .where(eq(doctorProfiles.userId, user.id));
 
   return c.json({ success: true });
+});
+
+app.post("/complete-profile", zValidator("json", completeProfileSchema), async (c) => {
+  const user = c.get("user" as never) as App.Locals["user"];
+  if (!user || user.role !== "doctor") return c.json({ error: "Forbidden" }, 403);
+
+  const existingProfile = await getDoctorProfileByUserId(c.env.DB, user.id);
+  if (existingProfile) return c.json({ error: "Doctor profile already exists" }, 400);
+
+  const data = c.req.valid("json");
+  const db = drizzle(c.env.DB);
+  const now = Math.floor(Date.now() / 1000);
+  const phone = data.phone?.trim() || null;
+
+  if (phone) {
+    const existingPhone = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone)).get();
+    if (existingPhone && existingPhone.id !== user.id) {
+      return c.json({ error: "That mobile number is already linked to another account" }, 400);
+    }
+  }
+
+  const verifiedDoctorCount = await countVerifiedDoctors(c.env.DB);
+  const adminExists = await hasAdminAccount(c.env.DB);
+  const isBootstrapDoctor = verifiedDoctorCount === 0 && !adminExists;
+  const needsDoctorRecommendation = verifiedDoctorCount > 0;
+
+  if (needsDoctorRecommendation) {
+    if (!data.recommendedByUserId) {
+      return c.json({ error: "Please choose an approved doctor for approval" }, 400);
+    }
+
+    const recommendedByProfile = await getDoctorProfileByUserId(c.env.DB, data.recommendedByUserId);
+    if (!recommendedByProfile || !recommendedByProfile.isVerified) {
+      return c.json({ error: "Selected doctor cannot review new registrations right now" }, 400);
+    }
+  }
+
+  const baseSlug = generateDoctorSlug(data.name, data.specialization, data.city);
+  const slug = `${baseSlug}-${user.id.slice(-4).toLowerCase()}`;
+
+  await db.update(users).set({ name: data.name, phone, updatedAt: now }).where(eq(users.id, user.id));
+
+  try {
+    await db.insert(doctorProfiles).values({
+      id: ulid(),
+      userId: user.id,
+      slug,
+      specialization: data.specialization,
+      qualification: data.qualification,
+      registrationNumber: data.registrationNumber,
+      registrationCouncil: data.registrationCouncil,
+      city: data.city ?? null,
+      state: data.state ?? null,
+      isVerified: isBootstrapDoctor,
+      verifiedAt: isBootstrapDoctor ? now : null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await db.delete(doctorApprovalRequests).where(eq(doctorApprovalRequests.doctorUserId, user.id));
+    if (!isBootstrapDoctor) {
+      await db.insert(doctorApprovalRequests).values({
+        id: ulid(),
+        doctorUserId: user.id,
+        recommendedByUserId: data.recommendedByUserId || null,
+        status: "pending",
+        requestedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  } catch (error) {
+    await db.delete(doctorApprovalRequests).where(eq(doctorApprovalRequests.doctorUserId, user.id));
+    await db.delete(doctorProfiles).where(eq(doctorProfiles.userId, user.id));
+    throw error;
+  }
+
+  return c.json({
+    success: true,
+    approvalStatus: isBootstrapDoctor ? "approved" : "pending",
+  });
 });
 
 async function getReviewerContext(c: Context<HonoEnv>) {

@@ -1,6 +1,7 @@
 ---
 // Redirect to role-appropriate dashboard
 import { getSessionUser } from "../../lib/auth/session";
+import { getDoctorProfileByUserId } from "../../lib/db/queries";
 
 const env = (Astro.locals as App.Locals).runtime?.env;
 const sessionCookie = Astro.cookies.get("session")?.value;
@@ -8,6 +9,11 @@ if (!sessionCookie || !env) return Astro.redirect("/auth/login");
 
 const user = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
 if (!user) return Astro.redirect("/auth/login");
+
+if (user.role === "doctor") {
+  const doctorProfile = await getDoctorProfileByUserId(env.DB, user.id);
+  if (!doctorProfile) return Astro.redirect("/auth/register/doctor?resume=1");
+}
 
 return Astro.redirect(`/dashboard/${user.role}`);
 ---

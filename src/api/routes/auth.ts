@@ -290,7 +290,7 @@ app.post("/logout", async (c) => {
   const sessionToken = getCookie(c, "session");
   if (sessionToken) await destroySession(c.env.SESSIONS, sessionToken);
   deleteCookie(c, "session", { path: "/" });
-  return c.json({ success: true });
+  return c.redirect("/");
 });
 
 // GET /api/auth/me

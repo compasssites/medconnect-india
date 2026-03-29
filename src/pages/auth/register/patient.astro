@@ -1,7 +1,7 @@
 ---
 import AuthLayout from "../../../layouts/AuthLayout.astro";
 import { getSession, getSessionUser, updateSessionUserId } from "../../../lib/auth/session";
-import { ensureAdminUser } from "../../../lib/db/queries";
+import { ensureAdminUser, getDoctorProfileByUserId } from "../../../lib/db/queries";
 import { getTurnstileClientConfig } from "../../../lib/auth/turnstile";
 
 Astro.response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -16,7 +16,11 @@ const sessionData = sessionCookie ? await getSession(env.SESSIONS, sessionCookie
 
 if (sessionData?.userId && sessionCookie) {
   const existingUser = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
-  if (existingUser?.role) return Astro.redirect(`/dashboard/${existingUser.role}`);
+  if (existingUser?.role === "doctor") {
+    const existingDoctorProfile = await getDoctorProfileByUserId(env.DB, existingUser.id);
+    if (!existingDoctorProfile) return Astro.redirect("/auth/register/doctor?resume=1");
+  }
+  if (existingUser?.role) return Astro.redirect("/dashboard");
 }
 
 const adminEmail = env.ADMIN_EMAIL?.trim().toLowerCase();
@@ -236,7 +240,7 @@ const turnstile = getTurnstileClientConfig(env);
 
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Registration failed");
-        window.location.href = `/dashboard/${data.role ?? "patient"}`;
+        window.location.href = "/dashboard";
       } catch (error) {
         formError.textContent = error instanceof Error ? error.message : "Registration failed";
         formError.classList.remove("hidden");

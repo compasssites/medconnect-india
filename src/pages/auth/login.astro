@@ -13,7 +13,7 @@ const sessionCookie = Astro.cookies.get("session")?.value;
 if (env && sessionCookie) {
   const user = await getSessionUser(env.SESSIONS, env.DB, sessionCookie);
   if (user?.role) {
-    return Astro.redirect(`/dashboard/${user.role}`);
+    return Astro.redirect("/dashboard");
   }
 }
 
@@ -150,7 +150,7 @@ const turnstile = getTurnstileClientConfig(env);
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Sign-in failed");
-      window.location.href = `/dashboard/${data.user?.role ?? ""}`;
+      window.location.href = "/dashboard";
     } catch (error) {
       formError.textContent = error instanceof Error ? error.message : "Sign-in failed";
       formError.classList.remove("hidden");

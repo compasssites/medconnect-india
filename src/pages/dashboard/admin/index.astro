@@ -1,10 +1,10 @@
 ---
 import DashboardLayout from "../../../layouts/DashboardLayout.astro";
 import { getSessionUser } from "../../../lib/auth/session";
-import { countVerifiedDoctors, getPendingApprovalRequestsForReviewer } from "../../../lib/db/queries";
+import { countUsersByRole, countVerifiedDoctors, getPendingApprovalRequestsForReviewer } from "../../../lib/db/queries";
 import { drizzle } from "drizzle-orm/d1";
 import { eq, sql } from "drizzle-orm";
-import { users } from "../../../lib/db/schema";
+import { doctorProfiles, users } from "../../../lib/db/schema";
 
 const env = (Astro.locals as App.Locals).runtime?.env;
 const sessionCookie = Astro.cookies.get("session")?.value;
@@ -17,8 +17,18 @@ const db = drizzle(env.DB);
 const approvalRequests = await getPendingApprovalRequestsForReviewer(env.DB);
 const approvedDoctors = await countVerifiedDoctors(env.DB);
 const userCount = (await db.select({ count: sql<number>`count(*)` }).from(users).get())?.count ?? 0;
+const adminCount = await countUsersByRole(env.DB, "admin");
 const patientCount =
   (await db.select({ count: sql<number>`count(*)` }).from(users).where(eq(users.role, "patient")).get())?.count ?? 0;
+const incompleteDoctorCount =
+  (
+    await db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .leftJoin(doctorProfiles, eq(doctorProfiles.userId, users.id))
+      .where(sql`${users.role} = 'doctor' AND ${doctorProfiles.userId} IS NULL`)
+      .get()
+  )?.count ?? 0;
 
 const recommenderIds = [...new Set(approvalRequests.map((item) => item.request.recommendedByUserId).filter(Boolean))] as string[];
 const recommenderMap: Record<string, string> = {};
@@ -34,9 +44,10 @@ for (const id of recommenderIds) {
     <p class="mt-1 text-sm text-[var(--color-muted)]">Signed in as {currentUser.email}</p>
   </div>
 
-  <div class="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+  <div class="mb-6 grid grid-cols-2 gap-4 md:grid-cols-5">
     {[
-      { label: "Total users", value: userCount, color: "text-[var(--color-primary)]" },
+      { label: "Total accounts", value: userCount, color: "text-[var(--color-primary)]" },
+      { label: "Admins", value: adminCount, color: "text-slate-700" },
       { label: "Patients", value: patientCount, color: "text-[var(--color-secondary)]" },
       { label: "Approved doctors", value: approvedDoctors, color: "text-blue-700" },
       { label: "Pending approvals", value: approvalRequests.length, color: "text-amber-700" },
@@ -47,6 +58,12 @@ for (const id of recommenderIds) {
       </div>
     ))}
   </div>
+
+  {incompleteDoctorCount > 0 && (
+    <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      {incompleteDoctorCount} doctor account{incompleteDoctorCount === 1 ? "" : "s"} still need{incompleteDoctorCount === 1 ? "s" : ""} to finish profile setup before an approval request can appear here.
+    </div>
+  )}
 
   <div class="rounded-2xl border border-[var(--color-border)] bg-white p-5">
     <div class="mb-4 flex items-center justify-between gap-4">

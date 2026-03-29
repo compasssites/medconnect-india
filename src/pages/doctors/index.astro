@@ -1,8 +1,21 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { searchDoctors } from "../../lib/db/queries";
+import { getSessionUser } from "../../lib/auth/session";
 
 const env = (Astro.locals as App.Locals).runtime?.env;
+const sessionCookie = Astro.cookies.get("session")?.value;
+const currentUser = env && sessionCookie ? await getSessionUser(env.SESSIONS, env.DB, sessionCookie) : null;
+const dashboardHref =
+  currentUser?.role === "admin"
+    ? "/dashboard/admin"
+    : currentUser?.role === "doctor"
+      ? "/dashboard/doctor"
+      : currentUser?.role === "patient"
+        ? "/dashboard/patient"
+        : null;
+const dashboardLabel =
+  currentUser?.role === "admin" ? "Back to admin dashboard" : currentUser ? "Back to dashboard" : null;
 
 const q = Astro.url.searchParams;
 const specialization = q.get("specialization") ?? undefined;
@@ -28,6 +41,16 @@ const SPECIALIZATIONS = [
 
 <BaseLayout title="Find Doctors — MedConnect" description="Search verified doctors across India. Consult directly, pay directly.">
   <main id="main-content">
+    {dashboardHref && dashboardLabel && (
+      <div class="border-b border-[var(--color-border)] bg-white">
+        <div class="container flex items-center justify-between gap-3 py-3 text-sm">
+          <span class="text-[var(--color-muted)]">Signed in as {currentUser?.email}</span>
+          <a href={dashboardHref} class="font-medium text-[var(--color-primary)] hover:underline">
+            {dashboardLabel}
+          </a>
+        </div>
+      </div>
+    )}
     <!-- Header -->
     <div class="bg-[var(--color-primary)] text-white py-10">
       <div class="container">
