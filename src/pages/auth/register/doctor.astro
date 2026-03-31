@@ -452,7 +452,7 @@ const turnstile = getTurnstileClientConfig(env);
       target.classList.remove("hidden");
     }
 
-    function clearError(target: HTMLElement) {
+    function clearError(target) {
       target.classList.add("hidden");
     }
 
@@ -464,7 +464,7 @@ const turnstile = getTurnstileClientConfig(env);
         seconds -= 1;
         resendTimer.textContent = `(${seconds}s)`;
         if (seconds <= 0) {
-          clearInterval(resendCountdown!);
+          clearInterval(resendCountdown);
           resendBtn.disabled = false;
           resendTimer.textContent = "";
         }

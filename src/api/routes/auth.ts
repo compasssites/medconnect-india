@@ -156,23 +156,33 @@ app.post("/login", zValidator("json", loginSchema), async (c) => {
 
 // POST /api/auth/send-registration-code
 app.post("/send-registration-code", zValidator("json", sendCodeSchema), async (c) => {
-  const { email, turnstileToken } = c.req.valid("json");
-  const turnstileResponse = await ensureTurnstile(c, turnstileToken, "register");
-  if (turnstileResponse) return turnstileResponse;
+  try {
+    const { email, turnstileToken } = c.req.valid("json");
+    const turnstileResponse = await ensureTurnstile(c, turnstileToken, "register");
+    if (turnstileResponse) return turnstileResponse;
 
-  const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
 
-  if (normalizedEmail === c.env.ADMIN_EMAIL?.trim().toLowerCase()) {
-    return c.json({ error: "Use sign in or password reset for the admin account" }, 400);
+    if (normalizedEmail === c.env.ADMIN_EMAIL?.trim().toLowerCase()) {
+      return c.json({ error: "Use sign in or password reset for the admin account" }, 400);
+    }
+
+    const existingUser = await getUserByEmail(c.env.DB, normalizedEmail);
+    if (existingUser) {
+      return c.json({ error: "An account already exists for this email. Sign in instead." }, 400);
+    }
+
+    const payload = await sendEmailCode(c.env, "register", normalizedEmail);
+    return c.json({ success: true, ...payload });
+  } catch (error) {
+    console.error("send-registration-code failed", error);
+    return c.json(
+      {
+        error: error instanceof Error ? `Failed to send code: ${error.message}` : "Failed to send code",
+      },
+      500
+    );
   }
-
-  const existingUser = await getUserByEmail(c.env.DB, normalizedEmail);
-  if (existingUser) {
-    return c.json({ error: "An account already exists for this email. Sign in instead." }, 400);
-  }
-
-  const payload = await sendEmailCode(c.env, "register", normalizedEmail);
-  return c.json({ success: true, ...payload });
 });
 
 // POST /api/auth/verify-registration-code
