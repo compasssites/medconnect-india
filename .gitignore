@@ -24,3 +24,8 @@ Thumbs.db
 
 # Drizzle generated (keep migrations, ignore journal)
 src/lib/db/migrations/meta/
+
+# Compass: generated output and agent scratch space
+build/
+coverage/
+.agent-tmp/
