@@ -9,7 +9,7 @@ Who uses it and the mood it should hold: Unknown (e.g. "Lab staff entering resul
 ## Foundation
 Framework: Astro
 Component library: Unknown (React Aria Components | shadcn/ui | Starwind | custom)
-Styling: Tailwind vUnknown; tokens live in Unknown (path to globals.css)
+Styling: Tailwind v4; tokens live in src/styles/global.css (no semantic tokens defined yet — add them here first)
 Icon set: Unknown
 
 ## Tokens (light)
@@ -27,10 +27,10 @@ Icon set: Unknown
 | ring | same as accent | focus |
 | success / warning / danger | Unknown | desaturated one step toward the neutrals |
 
-Dark mode: Unknown (supported | not supported). If supported, name the file that holds the overrides.
+Dark mode: not supported
 
 ## Type
-Family: Unknown (UI), Unknown (mono, identifiers and aligned numbers), display only if expressive.
+Family: var(--font-sans) (UI); mono Unknown
 Body size: Unknown (14 dense product | 16 content). Heading tracking: -0.015em. Numbers: tabular-nums.
 
 ## Shape and elevation
