@@ -10,6 +10,14 @@ SES_FROM_EMAIL = "forms@mycompass.in"
 ADMIN_EMAIL = "mywebsite@mycompass.in"
 TURNSTILE_SITE_KEY = ""
 TURNSTILE_ENFORCE_AFTER = "2026-04-29T00:00:00Z"
+# Primary email provider — see src/lib/auth/otp.ts. The other provider is always the
+# automatic backup, so set this to "cloudflare" to make Cloudflare primary instead.
+MAIL_PROVIDER = "ses"
+
+# Cloudflare Email Routing — native send binding, verified for mycompass.in.
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["forms@mycompass.in"]
 
 # Secrets (set via `wrangler secret put`):
 # MSG91_AUTH_KEY
