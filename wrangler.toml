@@ -69,3 +69,7 @@ secret_name = "AWS_SES_SECRET_ACCESS_KEY"
 binding = "AWS_SES_REGION"
 store_id = "07f5856b582c4503811d8d1e7ac2e18f"
 secret_name = "AWS_SES_REGION"
+
+# Workers Logs: keep errors and console output for the dashboard (Compass default).
+[observability]
+enabled = true
