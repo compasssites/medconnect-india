@@ -47,7 +47,7 @@ These are enforced by hooks and permissions. A "Compass guard" refusal is policy
 - React: shadcn/ui (Radix) for behaviour-heavy controls. Astro: shared Tailwind components, Starwind first, shadcn/ui where Starwind falls short. Never hand-roll modals, date pickers, comboboxes, menus, or select keyboard behaviour.
 - No inline `style` on forms and controls. Short create/edit forms go in an accessible centred modal; login, search, filters, and long workflows stay on a page.
 - Owner requirement (2026-09-05): one control-height token (normally 44px) with identical height, box-sizing, font, border, and padding on adjacent selects, inputs, and buttons; related fields in equal-width columns. Do not cap every paragraph to a narrow width or force heading breaks that strand text beside empty space.
-- Reuse the app's shared Button, FormDialog, ConfirmDialog, SideSheet, DataTable, PageHeader, and EmptyState (listed in `.compass/ui.md`); create a missing one once rather than composing it again in a screen. One filled primary button per view; buttons 8px apart; every modal, sheet, and drawer closes on Escape, X, and outside click, asks before discarding edits, and stays open with values kept on error. Never use the browser's `alert` or `confirm`.
+- Reuse the app's shared Button, FormDialog, ConfirmDialog, SideSheet, DataTable, PageHeader, and EmptyState (listed in `.compass/ui.md`); in React apps with shadcn install them with `~/CompassAgentMemory/bin/compass-ui-add`, elsewhere create a missing one once rather than composing it again in a screen. One filled primary button per view; buttons 8px apart; every modal, sheet, and drawer closes on Escape, X, and outside click, asks before discarding edits, and stays open with values kept on error. Never use the browser's `alert` or `confirm`.
 - Motion: opacity and transform only, 150–220ms (side sheets up to 240ms), `prefers-reduced-motion` honoured; no `transition-all`.
 <!-- compass:end:ui -->
 
@@ -141,7 +141,7 @@ Add human notes here.
 <!-- compass:start:workflows -->
 # Shipping and verification
 
-- Ship each meaningful change with `/Users/macpro/CompassAgentMemory/bin/compass-ship "message" [files…]`. It stages (everything, or the files named), refuses secret-looking files, runs the project check, commits, and pushes in one approval. Do not run `git add`, `git commit`, or `git push` yourself, and do not re-run the check it runs. Name the files when the tree holds work that is not yours.
+- Ship each meaningful change with `/Users/macpro/CompassAgentMemory/bin/compass-ship "message" [files…]`. It stages (everything, or the files named), refuses secret-looking files, refuses new accessibility defects on changed React lines (clickable divs, untyped buttons, missing alt text, browser `alert`/`confirm`; fix them, do not disable the rule), runs the project check, commits, and pushes in one approval. Do not run `git add`, `git commit`, or `git push` yourself, and do not re-run the check it runs. Name the files when the tree holds work that is not yours.
 - Run D1 migrations yourself right after adding them: `npx wrangler d1 migrations apply <DB> --remote`. A git-push deploy never applies them.
 - In an auto-deploy repo the push is the deploy. Do not sleep, wait, or poll for it. Check a live URL only when the change altered URL or API behaviour; if the new build is not live yet, say it is building and stop.
 - Deploy styles, what counts as verification, and the client summary format: load the `compass-workflow` skill.
