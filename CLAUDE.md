@@ -692,14 +692,9 @@ wrangler deploy
 10. **Dashboards polish** — History, tabs, status filters, final UI polish
 
 <!-- compass:start:claude -->
-Read these first:
-
 @AGENTS.md
 
-AGENTS.md is the single in-repo source: it already contains the global, security,
-stack, MCP, project and workflow sections. Do not add imports for .agent/*.md —
-those were byte-for-byte duplicates and loaded the same rules twice per session.
-
-Enforcement lives in .claude/settings.json (permissions.deny / permissions.ask and
-the Compass PreToolUse hook), compiled from ~/CompassAgentMemory/memory/60-policy.json.
+<!-- AGENTS.md is the single in-repo source, managed by Compass. Enforcement lives in
+.claude/settings.json, compiled from ~/CompassAgentMemory/memory/60-policy.json.
+Claude Code strips HTML comments before loading, so this note costs no tokens. -->
 <!-- compass:end:claude -->
