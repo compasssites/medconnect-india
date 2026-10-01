@@ -28,9 +28,6 @@ type Bindings = {
 
 declare namespace App {
   interface Locals {
-    runtime: {
-      env: Bindings;
-    };
     user?: {
       id: string;
       email: string;

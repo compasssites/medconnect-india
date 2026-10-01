@@ -4,12 +4,9 @@ import preact from "@astrojs/preact";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
+  compressHTML: true,
   output: "server",
-  adapter: cloudflare({
-    platformProxy: {
-      enabled: true,
-    },
-  }),
+  adapter: cloudflare({ imageService: "compile" }),
   integrations: [
     preact({ include: ["**/chat/**"] }),
   ],

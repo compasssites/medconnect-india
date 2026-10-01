@@ -1,5 +1,5 @@
 name = "medconnect"
-main = "dist/_worker.js/index.js"
+main = "@astrojs/cloudflare/entrypoints/server"
 compatibility_date = "2025-03-28"
 compatibility_flags = ["nodejs_compat"]
 
