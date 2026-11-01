@@ -14,13 +14,13 @@
     "db:migrate": "wrangler d1 migrations apply medconnect-db --remote"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^14.3.3",
-    "@astrojs/preact": "^6.0.5",
+    "@astrojs/cloudflare": "^14.4.3",
+    "@astrojs/preact": "^6.1.1",
     "@hono/zod-validator": "^0.9.1",
     "astro": "^7.3.5",
     "aws4fetch": "^1.0.20",
-    "drizzle-orm": "^0.45.3",
-    "hono": "^4.13.9",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.14",
     "preact": "^10.29.8",
     "ulid": "^2.3.0",
     "zod": "^3.24.2"
